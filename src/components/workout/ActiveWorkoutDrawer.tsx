@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlarmClock,
   ArrowUpDown,
@@ -332,6 +332,174 @@ function ExerciseIllustrationBadge({ muscle }: { muscle?: MuscleGroup }) {
         <circle cx="17" cy="22" r="3.5" fill="#1E293B" />
         <circle cx="37" cy="22" r="3.5" fill="#1E293B" />
       </svg>
+    </div>
+  );
+}
+
+/**
+ * Linha de série com suporte a arrastar para a esquerda (Swipe-to-Delete)
+ * Revela fundo vermelho "Excluir" ao arrastar para a esquerda; arrastar bastante exclui direto,
+ * ou arrastar parcialmente trava aberto o botão vermelho "Excluir".
+ */
+function SwipeableSetRow({
+  setId,
+  completed,
+  onDelete,
+  children,
+}: {
+  setId: string;
+  completed: boolean;
+  onDelete: () => void;
+  children: React.ReactNode;
+}) {
+  const [offsetX, setOffsetX] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const offsetXRef = useRef(0);
+  const isDraggingRef = useRef(false);
+  const startXRef = useRef(0);
+  const startYRef = useRef(0);
+  const baseOffsetRef = useRef(0);
+  const directionLockedRef = useRef<'horizontal' | 'vertical' | null>(null);
+
+  const REVEAL_WIDTH = 92;
+  const FULL_SWIPE_DELETE_THRESHOLD = 185;
+
+  const updateOffset = (val: number) => {
+    offsetXRef.current = val;
+    setOffsetX(val);
+  };
+
+  const finishDrag = () => {
+    if (!isDraggingRef.current) return;
+    isDraggingRef.current = false;
+    setIsDragging(false);
+    directionLockedRef.current = null;
+
+    const currentOffset = offsetXRef.current;
+    if (currentOffset <= -FULL_SWIPE_DELETE_THRESHOLD) {
+      updateOffset(-400);
+      setTimeout(() => {
+        onDelete();
+      }, 150);
+    } else if (currentOffset <= -40) {
+      updateOffset(-REVEAL_WIDTH);
+    } else {
+      updateOffset(0);
+    }
+  };
+
+  const beginDrag = (clientX: number, clientY: number) => {
+    startXRef.current = clientX;
+    startYRef.current = clientY;
+    baseOffsetRef.current = offsetXRef.current;
+    directionLockedRef.current = null;
+    isDraggingRef.current = true;
+    setIsDragging(true);
+  };
+
+  const moveDrag = (clientX: number, clientY: number) => {
+    if (!isDraggingRef.current) return;
+    const dx = clientX - startXRef.current;
+    const dy = clientY - startYRef.current;
+
+    if (!directionLockedRef.current) {
+      if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+      directionLockedRef.current =
+        Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical';
+    }
+
+    if (directionLockedRef.current === 'vertical') return;
+
+    const next = Math.min(0, Math.max(-260, baseOffsetRef.current + dx));
+    updateOffset(next);
+  };
+
+  // Touch Events (iPhone / Android / Mobile Webview)
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    beginDrag(touch.clientX, touch.clientY);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    moveDrag(touch.clientX, touch.clientY);
+  };
+
+  const handleTouchEnd = () => {
+    finishDrag();
+  };
+
+  // Pointer & Mouse Events (Desktop / Mobile / Touchpad)
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (e.pointerType === 'touch') return; // handled by touch events
+    const tag = (e.target as HTMLElement).tagName;
+    if (tag === 'INPUT') return;
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    beginDrag(e.clientX, e.clientY);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (e.pointerType === 'touch') return;
+    moveDrag(e.clientX, e.clientY);
+  };
+
+  const handlePointerUpOrCancel = (e: React.PointerEvent) => {
+    if (e.pointerType === 'touch') return;
+    finishDrag();
+  };
+
+  return (
+    <div
+      data-testid={`set-row-${setId}`}
+      className="relative overflow-hidden select-none touch-pan-y"
+    >
+      {/* Fundo Vermelho de Exclusão revelado ao arrastar para a esquerda */}
+      <div
+        className={`absolute inset-y-0 right-0 flex items-center justify-end bg-[#EF4444] text-white transition-opacity ${
+          offsetX < 0 ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+        style={{ width: `${Math.max(REVEAL_WIDTH, Math.abs(offsetX))}px` }}
+      >
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          aria-label="Excluir série"
+          className="h-full w-full px-4 flex items-center justify-center gap-1.5 font-bold text-xs uppercase tracking-wider text-white"
+        >
+          <Trash2 className="w-4 h-4 shrink-0" />
+          <span>Excluir</span>
+        </button>
+      </div>
+
+      {/* Conteúdo Principal da Série que desliza para a esquerda */}
+      <div
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUpOrCancel}
+        onPointerCancel={handlePointerUpOrCancel}
+        onClick={() => {
+          if (offsetXRef.current < -10 && !isDraggingRef.current) {
+            updateOffset(0);
+          }
+        }}
+        style={{
+          transform: `translateX(${offsetX}px)`,
+          transition: isDragging
+            ? 'none'
+            : 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)',
+        }}
+        className={`relative z-10 grid grid-cols-12 gap-1.5 items-center px-4 py-1.5 transition-colors ${
+          completed ? 'bg-[#DCFCE7]' : 'bg-white'
+        }`}
+      >
+        {children}
+      </div>
     </div>
   );
 }
@@ -837,11 +1005,13 @@ export function ActiveWorkoutDrawer() {
                     const fallbackPrevReps = prevSet?.reps ?? s.reps ?? 0;
 
                     return (
-                      <div
+                      <SwipeableSetRow
                         key={s.id}
-                        className={`grid grid-cols-12 gap-1.5 items-center px-4 py-1.5 transition-colors ${
-                          s.completed ? 'bg-[#DCFCE7]' : 'bg-white'
-                        }`}
+                        setId={s.id}
+                        completed={s.completed}
+                        onDelete={() =>
+                          removeSetFromActiveExercise(workoutEx.id, s.id)
+                        }
                       >
                         {/* SÉRIE (1, 2, 3, W, D, F) */}
                         <div className="col-span-2 flex items-center">
@@ -1024,7 +1194,7 @@ export function ActiveWorkoutDrawer() {
                             <Check className="w-5 h-5 stroke-[2.5]" />
                           </button>
                         </div>
-                      </div>
+                      </SwipeableSetRow>
                     );
                   })}
                 </div>
