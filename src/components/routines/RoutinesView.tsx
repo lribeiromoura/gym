@@ -34,6 +34,11 @@ import {
   shareOrCopyLink,
 } from '@/lib/share';
 import { searchExerciseDB } from '@/lib/exercisedb';
+import {
+  DecimalInput,
+  formatPtBrNumber,
+  IntegerInput,
+} from '@/components/ui/NumericInputs';
 
 const uid = (p = 'id') =>
   `${p}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -295,7 +300,7 @@ export function RoutinesView() {
                     </div>
                     <span className="text-slate-400 shrink-0">
                       {ex.sets[0]?.weightKg
-                        ? `${ex.sets[0].weightKg}kg × ${ex.sets[0].reps}`
+                        ? `${formatPtBrNumber(ex.sets[0].weightKg)}kg × ${ex.sets[0].reps}`
                         : `${ex.sets[0]?.reps || 10} reps`}
                     </span>
                   </div>
@@ -684,39 +689,35 @@ export function RoutinesView() {
                             </select>
 
                             <div className="col-span-3 flex items-center gap-1">
-                              <input
-                                type="number"
+                              <DecimalInput
                                 value={s.weightKg ?? 0}
-                                onChange={(e) => {
+                                ariaLabel="Peso (kg)"
+                                onChange={(val) => {
                                   const updated = [...editingRoutine.exercises];
-                                  updated[exIdx].sets[sIdx].weightKg = Number(
-                                    e.target.value
-                                  );
+                                  updated[exIdx].sets[sIdx].weightKg = val ?? 0;
                                   setEditingRoutine({
                                     ...editingRoutine,
                                     exercises: updated,
                                   });
                                 }}
-                                className="w-full text-center bg-slate-100 rounded-lg py-1 text-slate-900 font-bold"
+                                className="w-full text-center bg-slate-100 rounded-lg py-1 text-slate-900 font-bold focus:outline-none focus:ring-1 focus:ring-[#0084FF]"
                               />
                               <span className="text-slate-500">kg</span>
                             </div>
 
                             <div className="col-span-3 flex items-center gap-1">
-                              <input
-                                type="number"
+                              <IntegerInput
                                 value={s.reps ?? 10}
-                                onChange={(e) => {
+                                ariaLabel="Repetições"
+                                onChange={(val) => {
                                   const updated = [...editingRoutine.exercises];
-                                  updated[exIdx].sets[sIdx].reps = Number(
-                                    e.target.value
-                                  );
+                                  updated[exIdx].sets[sIdx].reps = val ?? 0;
                                   setEditingRoutine({
                                     ...editingRoutine,
                                     exercises: updated,
                                   });
                                 }}
-                                className="w-full text-center bg-slate-100 rounded-lg py-1 text-slate-900 font-bold"
+                                className="w-full text-center bg-slate-100 rounded-lg py-1 text-slate-900 font-bold focus:outline-none focus:ring-1 focus:ring-[#0084FF]"
                               />
                               <span className="text-slate-500">reps</span>
                             </div>

@@ -45,6 +45,11 @@ import {
   getNotificationPermissionState,
 } from '@/lib/notifications';
 import { searchExerciseDB } from '@/lib/exercisedb';
+import {
+  DecimalInput,
+  formatPtBrNumber,
+  IntegerInput,
+} from '@/components/ui/NumericInputs';
 
 const RPE_OPTIONS: RPEValue[] = [null, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10];
 const MUSCLE_OPTIONS = Object.keys(MUSCLE_LABELS) as MuscleGroup[];
@@ -1159,7 +1164,7 @@ export function ActiveWorkoutDrawer() {
                             className="text-[14px] text-slate-400 font-normal truncate block text-left"
                           >
                             {fallbackPrevWeight > 0 || fallbackPrevReps > 0
-                              ? `${fallbackPrevWeight}kg x ${fallbackPrevReps}`
+                              ? `${formatPtBrNumber(fallbackPrevWeight)}kg x ${fallbackPrevReps}`
                               : '—'}
                           </button>
                         </div>
@@ -1167,16 +1172,12 @@ export function ActiveWorkoutDrawer() {
                         {/* KG */}
                         <div className="col-span-2">
                           {meta?.measurementType === 'distance_duration' ? (
-                            <input
-                              type="number"
-                              step="0.1"
-                              value={s.distanceKm ?? ''}
-                              onChange={(e) =>
+                            <DecimalInput
+                              value={s.distanceKm}
+                              ariaLabel="Distância (km)"
+                              onChange={(val) =>
                                 updateActiveSet(workoutEx.id, s.id, {
-                                  distanceKm:
-                                    e.target.value === ''
-                                      ? null
-                                      : Number(e.target.value),
+                                  distanceKm: val,
                                 })
                               }
                               className={`w-full h-9 text-center rounded-xl text-[15px] font-semibold focus:outline-none ${
@@ -1186,16 +1187,12 @@ export function ActiveWorkoutDrawer() {
                               }`}
                             />
                           ) : (
-                            <input
-                              type="number"
-                              step="0.5"
-                              value={s.weightKg ?? ''}
-                              onChange={(e) =>
+                            <DecimalInput
+                              value={s.weightKg}
+                              ariaLabel="Peso (kg)"
+                              onChange={(val) =>
                                 updateActiveSet(workoutEx.id, s.id, {
-                                  weightKg:
-                                    e.target.value === ''
-                                      ? null
-                                      : Number(e.target.value),
+                                  weightKg: val,
                                 })
                               }
                               className={`w-full h-9 text-center rounded-xl text-[15px] font-semibold focus:outline-none ${
@@ -1211,15 +1208,12 @@ export function ActiveWorkoutDrawer() {
                         <div className="col-span-2">
                           {meta?.measurementType === 'duration' ||
                           meta?.measurementType === 'distance_duration' ? (
-                            <input
-                              type="number"
-                              value={s.durationSeconds ?? ''}
-                              onChange={(e) =>
+                            <IntegerInput
+                              value={s.durationSeconds}
+                              ariaLabel="Duração (segundos)"
+                              onChange={(val) =>
                                 updateActiveSet(workoutEx.id, s.id, {
-                                  durationSeconds:
-                                    e.target.value === ''
-                                      ? null
-                                      : Number(e.target.value),
+                                  durationSeconds: val,
                                 })
                               }
                               className={`w-full h-9 text-center rounded-xl text-[15px] font-semibold focus:outline-none ${
@@ -1229,15 +1223,12 @@ export function ActiveWorkoutDrawer() {
                               }`}
                             />
                           ) : (
-                            <input
-                              type="number"
-                              value={s.reps ?? ''}
-                              onChange={(e) =>
+                            <IntegerInput
+                              value={s.reps}
+                              ariaLabel="Repetições"
+                              onChange={(val) =>
                                 updateActiveSet(workoutEx.id, s.id, {
-                                  reps:
-                                    e.target.value === ''
-                                      ? null
-                                      : Number(e.target.value),
+                                  reps: val,
                                 })
                               }
                               className={`w-full h-9 text-center rounded-xl text-[15px] font-semibold focus:outline-none ${

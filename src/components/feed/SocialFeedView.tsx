@@ -22,6 +22,7 @@ import {
   encodeRoutineShareToken,
   shareOrCopyLink,
 } from '@/lib/share';
+import { formatPtBrNumber } from '@/components/ui/NumericInputs';
 
 export function SocialFeedView() {
   const workoutHistory = useWorkoutStore((s) => s.workoutHistory);
@@ -308,7 +309,7 @@ export function SocialFeedView() {
                           </div>
                           {bestSet && (
                             <span className="text-slate-600 font-semibold">
-                              Melhor: {bestSet.weightKg ?? 0}kg ×{' '}
+                              Melhor: {formatPtBrNumber(bestSet.weightKg ?? 0)}kg ×{' '}
                               {bestSet.reps ?? 0}
                             </span>
                           )}
@@ -332,7 +333,7 @@ export function SocialFeedView() {
                                     : sIdx + 1}
                                   :{' '}
                                   <strong>
-                                    {s.weightKg ?? 0}kg × {s.reps ?? 0} reps
+                                    {formatPtBrNumber(s.weightKg ?? 0)}kg × {s.reps ?? 0} reps
                                   </strong>
                                 </span>
                                 <span className="text-slate-500">

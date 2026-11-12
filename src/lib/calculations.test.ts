@@ -19,6 +19,12 @@ import {
   translateExerciseNamePtBr,
   translatePtQueryToEn,
 } from './exercisedb';
+import {
+  formatPtBrNumber,
+  parseDecimalString,
+  sanitizeDecimalString,
+  sanitizeIntegerString,
+} from '@/components/ui/NumericInputs';
 
 const SAMPLE_HISTORY: WorkoutSession[] = [
   {
@@ -226,5 +232,22 @@ describe('Motores de Cálculo IronPulse', () => {
       'https://static.exercisedb.dev/media/EIeI8Vf.gif'
     );
     expect(converted.instructions[0]).not.toContain('Step:1');
+  });
+
+  it('aceita e converte pesos decimais com vírgula ("15,5" e "9,1") e bloqueia caracteres não numéricos', () => {
+    expect(sanitizeDecimalString('15,5')).toBe('15,5');
+    expect(sanitizeDecimalString('9,1')).toBe('9,1');
+    expect(sanitizeDecimalString('15.5')).toBe('15,5');
+    expect(sanitizeDecimalString('abc15,5kg')).toBe('15,5');
+    expect(sanitizeDecimalString('15,,5,2')).toBe('15,52');
+
+    expect(parseDecimalString('15,5')).toBe(15.5);
+    expect(parseDecimalString('9,1')).toBe(9.1);
+    expect(parseDecimalString('15,')).toBe(15);
+    expect(formatPtBrNumber(15.5)).toBe('15,5');
+    expect(formatPtBrNumber(9.1)).toBe('9,1');
+
+    expect(sanitizeIntegerString('12reps')).toBe('12');
+    expect(sanitizeIntegerString('15,5')).toBe('155');
   });
 });
