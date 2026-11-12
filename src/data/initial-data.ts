@@ -6,6 +6,7 @@ import {
   UserSettings,
   WorkoutSession,
 } from '@/types/workout';
+import { EXERCISES_SEED } from './exercises-seed';
 
 export const INITIAL_USER_SETTINGS: UserSettings = {
   name: 'Usuário',
@@ -18,7 +19,7 @@ export const INITIAL_USER_SETTINGS: UserSettings = {
   weeklyWorkoutGoal: 4,
 };
 
-export const INITIAL_EXERCISES: Exercise[] = [];
+export const INITIAL_EXERCISES: Exercise[] = EXERCISES_SEED;
 export const INITIAL_FOLDERS: RoutineFolder[] = [];
 export const INITIAL_ROUTINES: Routine[] = [];
 export const INITIAL_WORKOUT_HISTORY: WorkoutSession[] = [];

@@ -771,7 +771,7 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
 
       clearAllData: () => {
         set({
-          exercises: [],
+          exercises: INITIAL_EXERCISES,
           folders: [],
           routines: [],
           workoutHistory: [],
@@ -783,7 +783,7 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
       },
     }),
     {
-      name: 'ironpulse-storage-v2',
+      name: 'ironpulse-storage-v3',
     }
   )
 );
