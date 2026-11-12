@@ -45,6 +45,7 @@ export interface CompactCustomExercise {
   eq: EquipmentType;
   mt: ExerciseMeasurementType;
   in: string[];
+  gif?: string;
 }
 
 export interface SharePayload {
@@ -106,7 +107,10 @@ function collectCustomExercises(
 
   const customList: CompactCustomExercise[] = [];
   for (const ex of allExercises) {
-    if (usedIds.has(ex.id) && (ex.isCustom || ex.id.startsWith('custom-'))) {
+    if (
+      usedIds.has(ex.id) &&
+      (ex.isCustom || ex.id.startsWith('custom-') || ex.id.startsWith('edb-'))
+    ) {
       customList.push({
         id: ex.id,
         t: ex.title,
@@ -115,6 +119,7 @@ function collectCustomExercises(
         eq: ex.equipment,
         mt: ex.measurementType,
         in: ex.instructions || [],
+        ...(ex.gifUrl ? { gif: ex.gifUrl } : {}),
       });
     }
   }

@@ -44,6 +44,7 @@ import {
   enableRestTimerNotifications,
   getNotificationPermissionState,
 } from '@/lib/notifications';
+import { searchExerciseDB } from '@/lib/exercisedb';
 
 const RPE_OPTIONS: RPEValue[] = [null, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10];
 const MUSCLE_OPTIONS = Object.keys(MUSCLE_LABELS) as MuscleGroup[];
@@ -305,37 +306,55 @@ function MiniAnatomyFigures({
 }
 
 /**
- * Avatar ilustrativo do exercício no estilo circular limpo
+ * Avatar ilustrativo do exercício no estilo circular limpo (exibe GIF da ExerciseDB quando disponível)
  */
-function ExerciseIllustrationBadge({ muscle }: { muscle?: MuscleGroup }) {
+function ExerciseIllustrationBadge({
+  muscle,
+  gifUrl,
+  title,
+}: {
+  muscle?: MuscleGroup;
+  gifUrl?: string;
+  title?: string;
+}) {
   return (
     <div className="w-11 h-11 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 overflow-hidden">
-      <svg viewBox="0 0 48 48" className="w-8 h-8">
-        {/* Banco / Máquina estilizada */}
-        <rect x="10" y="32" width="28" height="4" rx="2" fill="#64748B" />
-        <rect x="14" y="12" width="4" height="22" rx="1.5" fill="#94A3B8" />
-        {/* Silhueta com destaque laranja/azul no músculo */}
-        <circle cx="26" cy="14" r="4" fill="#334155" />
-        <rect
-          x="22"
-          y="19"
-          width="9"
-          height="12"
-          rx="3"
-          fill={muscle === 'chest' ? '#F97316' : '#0084FF'}
+      {gifUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={gifUrl}
+          alt={title || 'Exercício'}
+          loading="lazy"
+          className="w-full h-full object-cover bg-white"
         />
-        <line
-          x1="18"
-          y1="22"
-          x2="36"
-          y2="22"
-          stroke="#0F172A"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-        />
-        <circle cx="17" cy="22" r="3.5" fill="#1E293B" />
-        <circle cx="37" cy="22" r="3.5" fill="#1E293B" />
-      </svg>
+      ) : (
+        <svg viewBox="0 0 48 48" className="w-8 h-8">
+          {/* Banco / Máquina estilizada */}
+          <rect x="10" y="32" width="28" height="4" rx="2" fill="#64748B" />
+          <rect x="14" y="12" width="4" height="22" rx="1.5" fill="#94A3B8" />
+          {/* Silhueta com destaque laranja/azul no músculo */}
+          <circle cx="26" cy="14" r="4" fill="#334155" />
+          <rect
+            x="22"
+            y="19"
+            width="9"
+            height="12"
+            rx="3"
+            fill={muscle === 'chest' ? '#F97316' : '#0084FF'}
+          />
+          <line
+            x1="18"
+            y1="22"
+            x2="36"
+            y2="22"
+            stroke="#0F172A"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+          />
+          <circle cx="17" cy="22" r="3.5" fill="#1E293B" />
+          <circle cx="37" cy="22" r="3.5" fill="#1E293B" />
+        </svg>
+      )}
     </div>
   );
 }
@@ -546,6 +565,7 @@ export function ActiveWorkoutDrawer() {
     (s) => s.clearLastFinishedWorkout
   );
   const addCustomExercise = useWorkoutStore((s) => s.addCustomExercise);
+  const importExercisesBatch = useWorkoutStore((s) => s.importExercisesBatch);
 
   const tickRestTimer = useWorkoutStore((s) => s.tickRestTimer);
   const adjustRestTimer = useWorkoutStore((s) => s.adjustRestTimer);
@@ -577,6 +597,22 @@ export function ActiveWorkoutDrawer() {
   const [pickerSearch, setPickerSearch] = useState('');
   const [quickExMuscle, setQuickExMuscle] = useState<MuscleGroup>('chest');
   const [quickExEquip, setQuickExEquip] = useState<EquipmentType>('barbell');
+
+  useEffect(() => {
+    const q = pickerSearch.trim();
+    if (!showExercisePicker || q.length < 3) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const results = await searchExerciseDB(q);
+      if (!cancelled && results.length > 0) {
+        importExercisesBatch(results);
+      }
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [pickerSearch, showExercisePicker, importExercisesBatch]);
 
   const [inspectExercise, setInspectExercise] = useState<Exercise | null>(null);
   const [showFinishModal, setShowFinishModal] = useState(false);
@@ -957,7 +993,11 @@ export function ActiveWorkoutDrawer() {
                 {/* Linha 1: Avatar Ilustrativo + Nome em Azul + Menu 3 Pontos (⋮) */}
                 <div className="px-4 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
-                    <ExerciseIllustrationBadge muscle={meta?.primaryMuscle} />
+                    <ExerciseIllustrationBadge
+                      muscle={meta?.primaryMuscle}
+                      gifUrl={meta?.gifUrl}
+                      title={meta?.title}
+                    />
                     <div className="min-w-0">
                       <button
                         type="button"
@@ -1648,6 +1688,10 @@ export function ActiveWorkoutDrawer() {
                     e.title
                       .toLowerCase()
                       .includes(pickerSearch.toLowerCase()) ||
+                    (e.englishTitle &&
+                      e.englishTitle
+                        .toLowerCase()
+                        .includes(pickerSearch.toLowerCase())) ||
                     MUSCLE_LABELS[e.primaryMuscle]
                       .toLowerCase()
                       .includes(pickerSearch.toLowerCase())
@@ -1673,7 +1717,11 @@ export function ActiveWorkoutDrawer() {
                     className="w-full text-left p-3 rounded-2xl hover:bg-slate-100 flex items-center justify-between transition"
                   >
                     <div className="flex items-center gap-3">
-                      <ExerciseIllustrationBadge muscle={ex.primaryMuscle} />
+                      <ExerciseIllustrationBadge
+                        muscle={ex.primaryMuscle}
+                        gifUrl={ex.gifUrl}
+                        title={ex.title}
+                      />
                       <div>
                         <p className="text-sm font-bold text-slate-900">
                           {ex.title}

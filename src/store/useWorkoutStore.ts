@@ -116,6 +116,7 @@ interface WorkoutStoreState {
 
   // Actions — Exercises
   addCustomExercise: (exercise: Omit<Exercise, 'id' | 'isCustom'>) => Exercise;
+  importExercisesBatch: (incoming: Exercise[]) => number;
   deleteExercise: (exerciseId: string) => void;
 
   // Actions — Workout History
@@ -775,6 +776,7 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
                 equipment: ce.eq,
                 measurementType: ce.mt,
                 instructions: ce.in || [],
+                gifUrl: ce.gif,
                 isCustom: true,
               });
               existingExIds.add(ce.id);
@@ -848,6 +850,51 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
         };
         set({ exercises: [newEx, ...get().exercises] });
         return newEx;
+      },
+
+      importExercisesBatch: (incoming) => {
+        const current = get().exercises;
+        const byId = new Map(current.map((e) => [e.id, e]));
+        const byTitle = new Set(
+          current.map((e) => e.title.toLowerCase().trim())
+        );
+
+        const toAdd: Exercise[] = [];
+        let updatedExisting = false;
+        const updatedList = current.map((existing) => {
+          const match = incoming.find(
+            (inc) =>
+              inc.id === existing.id ||
+              (inc.englishTitle &&
+                existing.englishTitle &&
+                inc.englishTitle.toLowerCase() ===
+                  existing.englishTitle.toLowerCase()) ||
+              inc.title.toLowerCase() === existing.title.toLowerCase()
+          );
+          if (match && match.gifUrl && !existing.gifUrl) {
+            updatedExisting = true;
+            return {
+              ...existing,
+              gifUrl: match.gifUrl,
+              englishTitle: existing.englishTitle || match.englishTitle,
+            };
+          }
+          return existing;
+        });
+
+        for (const item of incoming) {
+          const normTitle = item.title.toLowerCase().trim();
+          if (!byId.has(item.id) && !byTitle.has(normTitle)) {
+            toAdd.push(item);
+            byId.set(item.id, item);
+            byTitle.add(normTitle);
+          }
+        }
+
+        if (toAdd.length > 0 || updatedExisting) {
+          set({ exercises: [...updatedList, ...toAdd] });
+        }
+        return toAdd.length;
       },
 
       deleteExercise: (exerciseId) => {
@@ -933,6 +980,38 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
     }),
     {
       name: 'ironpulse-storage-v3',
+      merge: (persistedState, currentState) => {
+        const persisted = (persistedState as Partial<WorkoutStoreState>) || {};
+        const persistedExercises = persisted.exercises || [];
+        const existingMap = new Map(persistedExercises.map((e) => [e.id, e]));
+
+        // Atualiza os exercícios existentes com novos metadados (gifUrl, englishTitle) e adiciona novos do seed
+        const mergedExercises = persistedExercises.map((ex) => {
+          const seedMatch = INITIAL_EXERCISES.find((s) => s.id === ex.id);
+          if (seedMatch) {
+            return {
+              ...seedMatch,
+              ...ex,
+              gifUrl: ex.gifUrl || seedMatch.gifUrl,
+              englishTitle: ex.englishTitle || seedMatch.englishTitle,
+            };
+          }
+          return ex;
+        });
+
+        for (const seedEx of INITIAL_EXERCISES) {
+          if (!existingMap.has(seedEx.id)) {
+            mergedExercises.push(seedEx);
+          }
+        }
+
+        return {
+          ...currentState,
+          ...persisted,
+          exercises:
+            mergedExercises.length > 0 ? mergedExercises : INITIAL_EXERCISES,
+        };
+      },
     }
   )
 );

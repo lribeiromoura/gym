@@ -14,6 +14,11 @@ import {
   encodeFolderShareToken,
   encodeRoutineShareToken,
 } from './share';
+import {
+  convertExerciseDBItem,
+  translateExerciseNamePtBr,
+  translatePtQueryToEn,
+} from './exercisedb';
 
 const SAMPLE_HISTORY: WorkoutSession[] = [
   {
@@ -183,5 +188,43 @@ describe('Motores de Cálculo IronPulse', () => {
     expect(decodedFolder?.k).toBe('folder');
     expect(decodedFolder?.fn).toBe('Divisão ABC');
     expect(decodedFolder?.r.length).toBe(1);
+  });
+
+  it('traduz exercícios e buscas da ExerciseDB para Português (pt-BR) com GIF e anatomia', () => {
+    expect(translateExerciseNamePtBr('barbell incline bench press')).toBe(
+      'Supino Inclinado (Barra)'
+    );
+    expect(translateExerciseNamePtBr('cable rope triceps pushdown')).toBe(
+      'Tríceps Pulley Corda (Polia)'
+    );
+    expect(translatePtQueryToEn('supino inclinado')).toBe(
+      'incline bench press'
+    );
+    expect(translatePtQueryToEn('elevação lateral')).toBe('lateral raise');
+
+    const converted = convertExerciseDBItem({
+      exerciseId: 'EIeI8Vf',
+      name: 'barbell bench press',
+      gifUrl: 'https://static.exercisedb.dev/media/EIeI8Vf.gif',
+      bodyParts: ['chest'],
+      equipments: ['barbell'],
+      targetMuscles: ['pectorals'],
+      secondaryMuscles: ['triceps', 'deltoids'],
+      instructions: [
+        'Step:1 Settle onto a bench with your feet planted.',
+        'Step:2 Hold the barbell with palms facing down.',
+      ],
+    });
+
+    expect(converted.id).toBe('edb-EIeI8Vf');
+    expect(converted.title).toBe('Supino Reto (Barra)');
+    expect(converted.primaryMuscle).toBe('chest');
+    expect(converted.equipment).toBe('barbell');
+    expect(converted.secondaryMuscles).toContain('triceps');
+    expect(converted.secondaryMuscles).toContain('shoulders');
+    expect(converted.gifUrl).toBe(
+      'https://static.exercisedb.dev/media/EIeI8Vf.gif'
+    );
+    expect(converted.instructions[0]).not.toContain('Step:1');
   });
 });

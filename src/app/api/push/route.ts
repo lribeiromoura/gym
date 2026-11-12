@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import webpush from 'web-push';
+import * as webpush from 'web-push';
 
 // Chaves VAPID padrão (podem ser sobrescritas via variáveis de ambiente NEXT_PUBLIC_VAPID_PUBLIC_KEY e VAPID_PRIVATE_KEY)
 const DEFAULT_VAPID_PUBLIC_KEY =

@@ -1,10 +1,13 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Check,
   ChevronRight,
+  DownloadCloud,
   Dumbbell,
   Filter,
+  Loader2,
   Plus,
   Search,
   Sparkles,
@@ -22,6 +25,7 @@ import {
 } from '@/types/workout';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import { getExerciseRecords } from '@/lib/calculations';
+import { fetchExerciseDBCatalog, searchExerciseDB } from '@/lib/exercisedb';
 import { ExerciseDetailModal } from './ExerciseDetailModal';
 
 const MUSCLE_OPTIONS = Object.keys(MUSCLE_LABELS) as MuscleGroup[];
@@ -35,6 +39,7 @@ export function ExercisesView() {
     (s) => s.addExerciseToActiveWorkout
   );
   const addCustomExercise = useWorkoutStore((s) => s.addCustomExercise);
+  const importExercisesBatch = useWorkoutStore((s) => s.importExercisesBatch);
   const deleteExercise = useWorkoutStore((s) => s.deleteExercise);
 
   const [search, setSearch] = useState('');
@@ -49,6 +54,63 @@ export function ExercisesView() {
   );
   const [showCustomModal, setShowCustomModal] = useState(false);
 
+  const [isSearchingApi, setIsSearchingApi] = useState(false);
+  const [isSyncingCatalog, setIsSyncingCatalog] = useState(false);
+  const [catalogOffset, setCatalogOffset] = useState(0);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+
+  // Busca automática na API ExerciseDB (traduzindo pt-BR <-> EN) ao digitar na busca
+  useEffect(() => {
+    const q = search.trim();
+    if (q.length < 3) {
+      setIsSearchingApi(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsSearchingApi(true);
+    const timer = setTimeout(async () => {
+      const results = await searchExerciseDB(q);
+      if (!cancelled) {
+        if (results.length > 0) {
+          importExercisesBatch(results);
+        }
+        setIsSearchingApi(false);
+      }
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [search, importExercisesBatch]);
+
+  const handleSyncFromExerciseDB = async () => {
+    if (isSyncingCatalog) return;
+    setIsSyncingCatalog(true);
+    setSyncFeedback(null);
+    try {
+      const { exercises: batch, hasNextPage } = await fetchExerciseDBCatalog(
+        catalogOffset,
+        25
+      );
+      if (batch.length > 0) {
+        const added = importExercisesBatch(batch);
+        setCatalogOffset((prev) => (hasNextPage ? prev + 25 : 0));
+        setSyncFeedback(
+          added > 0
+            ? `+${added} exercícios c/ GIF importados em pt-BR!`
+            : `Lote sincronizado (GIFs atualizados)!`
+        );
+      } else {
+        setSyncFeedback('Não foi possível conectar à ExerciseDB no momento.');
+      }
+    } finally {
+      setIsSyncingCatalog(false);
+      setTimeout(() => setSyncFeedback(null), 4000);
+    }
+  };
+
   const [customTitle, setCustomTitle] = useState('');
   const [customPrimary, setCustomPrimary] = useState<MuscleGroup>('chest');
   const [customSecondary, setCustomSecondary] = useState<MuscleGroup[]>([]);
@@ -59,10 +121,13 @@ export function ExercisesView() {
   const [customInstructions, setCustomInstructions] = useState('');
 
   const filteredExercises = useMemo(() => {
+    const q = search.trim().toLowerCase();
     return exercises.filter((ex) => {
-      const matchesSearch = ex.title
-        .toLowerCase()
-        .includes(search.trim().toLowerCase());
+      const matchesSearch =
+        !q ||
+        ex.title.toLowerCase().includes(q) ||
+        (ex.englishTitle && ex.englishTitle.toLowerCase().includes(q)) ||
+        MUSCLE_LABELS[ex.primaryMuscle].toLowerCase().includes(q);
       const matchesMuscle =
         selectedMuscle === 'all' ||
         ex.primaryMuscle === selectedMuscle ||
@@ -110,18 +175,41 @@ export function ExercisesView() {
           <p className="text-sm text-slate-500">
             {exercises.length}{' '}
             {exercises.length === 1
-              ? 'exercício cadastrado'
-              : 'exercícios cadastrados'}
+              ? 'exercício disponível em pt-BR'
+              : 'exercícios disponíveis em pt-BR (integrado à ExerciseDB)'}
           </p>
         </div>
-        <button
-          onClick={() => setShowCustomModal(true)}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full bg-[#0084FF] hover:bg-blue-600 text-white font-bold text-sm shadow-sm transition"
-        >
-          <Plus className="w-4 h-4" />
-          Novo Exercício
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleSyncFromExerciseDB}
+            disabled={isSyncingCatalog}
+            className="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-full bg-blue-50 hover:bg-blue-100 text-[#0084FF] font-bold text-xs sm:text-sm border border-blue-200 transition disabled:opacity-60"
+          >
+            {isSyncingCatalog ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <DownloadCloud className="w-4 h-4" />
+            )}
+            <span>Importar + da ExerciseDB (pt-BR)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowCustomModal(true)}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full bg-[#0084FF] hover:bg-blue-600 text-white font-bold text-xs sm:text-sm shadow-sm transition"
+          >
+            <Plus className="w-4 h-4" />
+            Novo Exercício
+          </button>
+        </div>
       </div>
+
+      {syncFeedback && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-2">
+          <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>{syncFeedback}</span>
+        </div>
+      )}
 
       {/* Barra de Busca e Filtros */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3.5 shadow-xs">
@@ -131,17 +219,22 @@ export function ExercisesView() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar exercício..."
-            className="w-full pl-10 pr-9 py-2.5 rounded-xl bg-[#F1F5F9] text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0084FF]"
+            placeholder="Buscar exercício em português ou inglês (busca também na ExerciseDB)..."
+            className="w-full pl-10 pr-16 py-2.5 rounded-xl bg-[#F1F5F9] text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0084FF]"
           />
-          {search && (
-            <button
-              onClick={() => setSearch('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+            {isSearchingApi && (
+              <Loader2 className="w-4 h-4 text-[#0084FF] animate-spin" />
+            )}
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -221,8 +314,18 @@ export function ExercisesView() {
                 className="group bg-white hover:bg-slate-50 border border-slate-200 hover:border-[#0084FF]/40 rounded-2xl p-3.5 flex items-center justify-between gap-2.5 cursor-pointer transition shadow-2xs"
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="w-11 h-11 rounded-full bg-[#F1F5F9] border border-slate-200 flex items-center justify-center text-[#0084FF] shrink-0">
-                    <Dumbbell className="w-5 h-5" />
+                  <div className="w-12 h-12 rounded-full bg-[#F1F5F9] border border-slate-200 flex items-center justify-center text-[#0084FF] shrink-0 overflow-hidden">
+                    {ex.gifUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={ex.gifUrl}
+                        alt={ex.title}
+                        loading="lazy"
+                        className="w-full h-full object-cover bg-white"
+                      />
+                    ) : (
+                      <Dumbbell className="w-5 h-5" />
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <h3 className="font-bold text-slate-900 text-[15px] leading-snug line-clamp-2 group-hover:text-[#0084FF] transition">

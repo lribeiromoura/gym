@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Award,
   BookOpen,
@@ -20,6 +20,7 @@ import {
   getRepMaxTable,
 } from '@/lib/calculations';
 import { BodyHeatmapSVG } from '@/components/analytics/BodyHeatmapSVG';
+import { fetchExerciseDBDetail, searchExerciseDB } from '@/lib/exercisedb';
 
 interface ExerciseDetailModalProps {
   exercise: Exercise | null;
@@ -28,10 +29,60 @@ interface ExerciseDetailModalProps {
 
 export function ExerciseDetailModal({ exercise, onClose }: ExerciseDetailModalProps) {
   const workoutHistory = useWorkoutStore((s) => s.workoutHistory);
+  const importExercisesBatch = useWorkoutStore((s) => s.importExercisesBatch);
   const [activeTab, setActiveTab] = useState<'summary' | 'history' | 'howto'>(
     'summary'
   );
   const [metric, setMetric] = useState<'heaviest' | '1rm' | 'volume'>('1rm');
+  const [resolvedGifUrl, setResolvedGifUrl] = useState<string | undefined>(
+    undefined
+  );
+  const [resolvedInstructions, setResolvedInstructions] = useState<string[]>(
+    []
+  );
+
+  useEffect(() => {
+    if (!exercise) {
+      setResolvedGifUrl(undefined);
+      setResolvedInstructions([]);
+      return;
+    }
+    setResolvedGifUrl(exercise.gifUrl);
+    setResolvedInstructions(exercise.instructions || []);
+
+    let cancelled = false;
+    (async () => {
+      if (exercise.externalId) {
+        const detail = await fetchExerciseDBDetail(exercise.externalId);
+        if (!cancelled && detail) {
+          if (detail.gifUrl) setResolvedGifUrl(detail.gifUrl);
+          if (detail.instructions.length > 0) {
+            setResolvedInstructions(detail.instructions);
+          }
+          importExercisesBatch([detail]);
+          return;
+        }
+      }
+      if (!exercise.gifUrl) {
+        const query = exercise.englishTitle || exercise.title;
+        const results = await searchExerciseDB(query);
+        if (!cancelled && results.length > 0 && results[0].gifUrl) {
+          setResolvedGifUrl(results[0].gifUrl);
+          importExercisesBatch([
+            {
+              ...exercise,
+              gifUrl: results[0].gifUrl,
+              englishTitle: exercise.englishTitle || results[0].englishTitle,
+            },
+          ]);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [exercise, importExercisesBatch]);
 
   const records = useMemo(() => {
     if (!exercise) return null;
@@ -168,6 +219,21 @@ export function ExerciseDetailModal({ exercise, onClose }: ExerciseDetailModalPr
         <div className="p-5 overflow-y-auto space-y-6 flex-1">
           {activeTab === 'summary' && (
             <>
+              {resolvedGifUrl && (
+                <div className="bg-white border border-slate-200 rounded-2xl p-3 flex flex-col items-center justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={resolvedGifUrl}
+                    alt={exercise.title}
+                    loading="lazy"
+                    className="w-44 h-44 object-contain rounded-xl bg-white"
+                  />
+                  <span className="text-[11px] text-slate-400 mt-1">
+                    Demonstração da Execução (ExerciseDB)
+                  </span>
+                </div>
+              )}
+
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center gap-4">
                 <div className="flex-1 space-y-2">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
@@ -453,18 +519,30 @@ export function ExerciseDetailModal({ exercise, onClose }: ExerciseDetailModalPr
 
           {activeTab === 'howto' && (
             <div className="space-y-6">
+              {resolvedGifUrl && (
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={resolvedGifUrl}
+                    alt={exercise.title}
+                    loading="lazy"
+                    className="w-52 h-52 object-contain rounded-xl bg-white"
+                  />
+                </div>
+              )}
+
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
                 <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                   <Dumbbell className="w-4 h-4 text-[#0084FF]" />
                   Instruções Passo a Passo
                 </h3>
-                {exercise.instructions.length === 0 ? (
+                {resolvedInstructions.length === 0 ? (
                   <p className="text-xs text-slate-500">
                     Nenhuma instrução cadastrada para este exercício.
                   </p>
                 ) : (
                   <ol className="space-y-2.5 text-xs sm:text-sm text-slate-700 list-decimal list-inside">
-                    {exercise.instructions.map((step, i) => (
+                    {resolvedInstructions.map((step, i) => (
                       <li key={i} className="leading-relaxed">
                         {step}
                       </li>

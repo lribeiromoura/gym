@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Check,
   Copy,
@@ -33,6 +33,7 @@ import {
   encodeRoutineShareToken,
   shareOrCopyLink,
 } from '@/lib/share';
+import { searchExerciseDB } from '@/lib/exercisedb';
 
 const uid = (p = 'id') =>
   `${p}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -54,6 +55,7 @@ export function RoutinesView() {
   const duplicateRoutine = useWorkoutStore((s) => s.duplicateRoutine);
   const deleteRoutine = useWorkoutStore((s) => s.deleteRoutine);
   const addCustomExercise = useWorkoutStore((s) => s.addCustomExercise);
+  const importExercisesBatch = useWorkoutStore((s) => s.importExercisesBatch);
 
   const [showFolderModal, setShowFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -102,6 +104,22 @@ export function RoutinesView() {
   const [exQuery, setExQuery] = useState('');
   const [quickExMuscle, setQuickExMuscle] = useState<MuscleGroup>('chest');
   const [quickExEquip, setQuickExEquip] = useState<EquipmentType>('barbell');
+
+  useEffect(() => {
+    const q = exQuery.trim();
+    if (!showExSearch || q.length < 3) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const results = await searchExerciseDB(q);
+      if (!cancelled && results.length > 0) {
+        importExercisesBatch(results);
+      }
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [exQuery, showExSearch, importExercisesBatch]);
 
   const exerciseMap = useMemo(
     () => new Map(exercises.map((e) => [e.id, e])),
@@ -822,18 +840,30 @@ export function RoutinesView() {
 
                     <div className="max-h-48 overflow-y-auto space-y-1">
                       {exercises
-                        .filter((e) =>
-                          e.title.toLowerCase().includes(exQuery.toLowerCase())
+                        .filter(
+                          (e) =>
+                            e.title
+                              .toLowerCase()
+                              .includes(exQuery.toLowerCase()) ||
+                            (e.englishTitle &&
+                              e.englishTitle
+                                .toLowerCase()
+                                .includes(exQuery.toLowerCase())) ||
+                            MUSCLE_LABELS[e.primaryMuscle]
+                              .toLowerCase()
+                              .includes(exQuery.toLowerCase())
                         )
                         .map((e) => (
                           <button
                             type="button"
                             key={e.id}
                             onClick={() => addExerciseToDraft(e.id)}
-                            className="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-200/70 text-xs text-slate-900 flex items-center justify-between"
+                            className="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-200/70 text-xs text-slate-900 flex items-center justify-between gap-2"
                           >
-                            <span className="font-semibold">{e.title}</span>
-                            <span className="text-slate-500">
+                            <span className="font-semibold truncate">
+                              {e.title}
+                            </span>
+                            <span className="text-slate-500 shrink-0">
                               {MUSCLE_LABELS[e.primaryMuscle]} •{' '}
                               {EQUIPMENT_LABELS[e.equipment]}
                             </span>
