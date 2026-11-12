@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   BarChart3,
+  Bell,
   Camera,
   Check,
   CheckCircle2,
@@ -23,6 +24,11 @@ import {
   calculateMuscleDistribution,
   exportWorkoutsToCSV,
 } from '@/lib/calculations';
+import {
+  enableRestTimerNotifications,
+  getNotificationPermissionState,
+  triggerImmediateRestNotification,
+} from '@/lib/notifications';
 import { BodyHeatmapSVG } from '@/components/analytics/BodyHeatmapSVG';
 
 export function ProfileAnalyticsView() {
@@ -71,6 +77,14 @@ export function ProfileAnalyticsView() {
   const [mCalf, setMCalf] = useState('');
 
   const [csvFeedback, setCsvFeedback] = useState<string | null>(null);
+  const [notifStatus, setNotifStatus] = useState<
+    NotificationPermission | 'unsupported'
+  >('default');
+  const [notifMessage, setNotifMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setNotifStatus(getNotificationPermissionState());
+  }, []);
 
   const filteredWorkouts = useMemo(() => {
     if (periodDays === 'all') return workoutHistory;
@@ -951,6 +965,68 @@ export function ProfileAnalyticsView() {
                   }
                   className="w-4 h-4 accent-[#0084FF]"
                 />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <span className="text-slate-900 font-bold flex items-center gap-1.5">
+                      <Bell className="w-3.5 h-3.5 text-[#0084FF]" />
+                      Notificações Push no iPhone / Segundo Plano
+                    </span>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Receba alerta na tela bloqueada quando o tempo de descanso acabar.
+                    </p>
+                  </div>
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase shrink-0 ${
+                      notifStatus === 'granted'
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {notifStatus === 'granted' ? 'Ativo' : 'Inativo'}
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {notifStatus !== 'granted' ? (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const res = await enableRestTimerNotifications();
+                        setNotifStatus(getNotificationPermissionState());
+                        if (res.granted) {
+                          setNotifMessage(
+                            'Notificações de descanso ativadas com sucesso!'
+                          );
+                        } else if (res.reason) {
+                          setNotifMessage(res.reason);
+                        }
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-[#0084FF] hover:bg-blue-600 text-white font-bold text-xs flex items-center gap-1.5"
+                    >
+                      <Bell className="w-3.5 h-3.5" /> Ativar Notificações de Descanso
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await triggerImmediateRestNotification('Supino Reto');
+                        setNotifMessage('Notificação de teste enviada!');
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center gap-1.5"
+                    >
+                      <Bell className="w-3.5 h-3.5 text-[#0084FF]" /> Testar Notificação Agora
+                    </button>
+                  )}
+                </div>
+
+                {notifMessage && (
+                  <p className="text-[11px] text-[#0084FF] font-medium">
+                    {notifMessage}
+                  </p>
+                )}
               </div>
             </div>
           </div>

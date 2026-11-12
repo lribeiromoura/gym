@@ -25,11 +25,16 @@ import {
   INITIAL_WORKOUT_HISTORY,
 } from '@/data/initial-data';
 import { evaluateWorkoutPRs, getPreviousExerciseSets } from '@/lib/calculations';
+import {
+  cancelRestNotification,
+  scheduleRestNotification,
+} from '@/lib/notifications';
 
 interface RestTimerState {
   isActive: boolean;
   totalSeconds: number;
   remainingSeconds: number;
+  endTime?: number | null;
   exerciseTitle?: string;
 }
 
@@ -460,22 +465,31 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
           };
         });
 
+        const nextEndTime = shouldStartTimer
+          ? Date.now() + restDuration * 1000
+          : null;
+
         set({
           activeWorkout: {
             ...current,
             exercises: updatedExercises,
           },
-          ...(shouldStartTimer
+          ...(shouldStartTimer && nextEndTime
             ? {
                 restTimer: {
                   isActive: true,
                   totalSeconds: restDuration,
                   remainingSeconds: restDuration,
+                  endTime: nextEndTime,
                   exerciseTitle,
                 },
               }
             : {}),
         });
+
+        if (shouldStartTimer && nextEndTime) {
+          scheduleRestNotification(nextEndTime, exerciseTitle);
+        }
       },
 
       finishActiveWorkout: (updateOriginalRoutine = false) => {
@@ -560,8 +574,15 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
           routines: updatedRoutines,
           activeWorkout: null,
           lastFinishedWorkout: isEditing ? null : savedSession,
-          restTimer: { isActive: false, totalSeconds: 90, remainingSeconds: 0 },
+          restTimer: {
+            isActive: false,
+            totalSeconds: 90,
+            remainingSeconds: 0,
+            endTime: null,
+          },
         });
+
+        cancelRestNotification();
 
         return savedSession;
       },
@@ -569,36 +590,59 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
       discardActiveWorkout: () => {
         set({
           activeWorkout: null,
-          restTimer: { isActive: false, totalSeconds: 90, remainingSeconds: 0 },
+          restTimer: {
+            isActive: false,
+            totalSeconds: 90,
+            remainingSeconds: 0,
+            endTime: null,
+          },
         });
+        cancelRestNotification();
       },
 
       clearLastFinishedWorkout: () => {
         set({ lastFinishedWorkout: null });
       },
 
-      // Rest Timer
+      // Rest Timer (baseado em timestamp endTime para precisão em segundo plano no iPhone)
       startRestTimer: (seconds, exerciseTitle) => {
+        const endTime = Date.now() + seconds * 1000;
         set({
           restTimer: {
             isActive: true,
             totalSeconds: seconds,
             remainingSeconds: seconds,
+            endTime,
             exerciseTitle,
           },
         });
+        scheduleRestNotification(endTime, exerciseTitle);
       },
 
       tickRestTimer: () => {
         const rt = get().restTimer;
         if (!rt.isActive) return;
-        if (rt.remainingSeconds <= 1) {
+
+        const now = Date.now();
+        const computedRemaining = rt.endTime
+          ? Math.max(0, Math.ceil((rt.endTime - now) / 1000))
+          : Math.max(0, rt.remainingSeconds - 1);
+
+        if (computedRemaining <= 0) {
           set({
-            restTimer: { ...rt, isActive: false, remainingSeconds: 0 },
+            restTimer: {
+              ...rt,
+              isActive: false,
+              remainingSeconds: 0,
+              endTime: null,
+            },
           });
         } else {
           set({
-            restTimer: { ...rt, remainingSeconds: rt.remainingSeconds - 1 },
+            restTimer: {
+              ...rt,
+              remainingSeconds: computedRemaining,
+            },
           });
         }
       },
@@ -606,22 +650,41 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
       adjustRestTimer: (deltaSeconds) => {
         const rt = get().restTimer;
         if (!rt.isActive) return;
-        const nextRemaining = Math.max(0, rt.remainingSeconds + deltaSeconds);
+        const now = Date.now();
+        const currentRemaining = rt.endTime
+          ? Math.max(0, Math.ceil((rt.endTime - now) / 1000))
+          : rt.remainingSeconds;
+        const nextRemaining = Math.max(0, currentRemaining + deltaSeconds);
         const nextTotal = Math.max(rt.totalSeconds, nextRemaining);
+        const nextEndTime = nextRemaining > 0 ? now + nextRemaining * 1000 : null;
+
         set({
           restTimer: {
             ...rt,
             totalSeconds: nextTotal,
             remainingSeconds: nextRemaining,
+            endTime: nextEndTime,
             isActive: nextRemaining > 0,
           },
         });
+
+        if (nextEndTime && nextRemaining > 0) {
+          scheduleRestNotification(nextEndTime, rt.exerciseTitle);
+        } else {
+          cancelRestNotification();
+        }
       },
 
       stopRestTimer: () => {
         set({
-          restTimer: { isActive: false, totalSeconds: 90, remainingSeconds: 0 },
+          restTimer: {
+            isActive: false,
+            totalSeconds: 90,
+            remainingSeconds: 0,
+            endTime: null,
+          },
         });
+        cancelRestNotification();
       },
 
       // Routines & Folders

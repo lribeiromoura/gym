@@ -40,6 +40,10 @@ import {
 } from '@/lib/calculations';
 import { ExerciseDetailModal } from '@/components/exercises/ExerciseDetailModal';
 import { BodyHeatmapSVG } from '@/components/analytics/BodyHeatmapSVG';
+import {
+  enableRestTimerNotifications,
+  getNotificationPermissionState,
+} from '@/lib/notifications';
 
 const RPE_OPTIONS: RPEValue[] = [null, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10];
 const MUSCLE_OPTIONS = Object.keys(MUSCLE_LABELS) as MuscleGroup[];
@@ -549,6 +553,23 @@ export function ActiveWorkoutDrawer() {
   const startRestTimer = useWorkoutStore((s) => s.startRestTimer);
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [notifPermission, setNotifPermission] = useState<
+    NotificationPermission | 'unsupported'
+  >('default');
+  const [notifBannerDismissed, setNotifBannerDismissed] = useState(false);
+
+  useEffect(() => {
+    setNotifPermission(getNotificationPermissionState());
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        tickRestTimer();
+        setNotifPermission(getNotificationPermissionState());
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () =>
+      document.removeEventListener('visibilitychange', handleVisibility);
+  }, [tickRestTimer]);
   const [showExercisePicker, setShowExercisePicker] = useState<{
     mode: 'add' | 'replace';
     targetWorkoutExerciseId?: string;
@@ -602,14 +623,18 @@ export function ActiveWorkoutDrawer() {
   useEffect(() => {
     if (!restTimer.isActive) return;
     const interval = setInterval(() => {
-      if (restTimer.remainingSeconds === 1 && settings.soundEnabled) {
+      const rem = restTimer.endTime
+        ? Math.max(0, Math.ceil((restTimer.endTime - Date.now()) / 1000))
+        : restTimer.remainingSeconds;
+      if (rem === 1 && settings.soundEnabled) {
         playTimerBeep();
       }
       tickRestTimer();
-    }, 1000);
+    }, 500);
     return () => clearInterval(interval);
   }, [
     restTimer.isActive,
+    restTimer.endTime,
     restTimer.remainingSeconds,
     settings.soundEnabled,
     tickRestTimer,
@@ -808,9 +833,13 @@ export function ActiveWorkoutDrawer() {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() =>
-              startRestTimer(settings.defaultRestSeconds, 'Descanso')
-            }
+            onClick={async () => {
+              if (notifPermission === 'default') {
+                const res = await enableRestTimerNotifications();
+                if (res.granted) setNotifPermission('granted');
+              }
+              startRestTimer(settings.defaultRestSeconds, 'Descanso');
+            }}
             aria-label="Timer de descanso"
             className="w-10 h-10 rounded-full bg-[#F1F5F9] hover:bg-slate-200 flex items-center justify-center text-slate-800 transition"
           >
@@ -862,6 +891,37 @@ export function ActiveWorkoutDrawer() {
 
         <MiniAnatomyFigures activeMuscles={liveStats.activeMuscles} />
       </div>
+
+      {/* Banner discreto para ativar notificações em segundo plano no iPhone/Android */}
+      {notifPermission === 'default' && !notifBannerDismissed && (
+        <div className="bg-blue-50 border-b border-blue-100 px-4 py-2 flex items-center justify-between gap-2 shrink-0">
+          <p className="text-xs text-slate-700">
+            Receber alerta no iPhone quando o descanso acabar?
+          </p>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={async () => {
+                const res = await enableRestTimerNotifications();
+                setNotifPermission(
+                  res.granted ? 'granted' : getNotificationPermissionState()
+                );
+              }}
+              className="px-3 py-1 rounded-full bg-[#0084FF] text-white text-xs font-bold"
+            >
+              Ativar
+            </button>
+            <button
+              type="button"
+              onClick={() => setNotifBannerDismissed(true)}
+              className="p-1 text-slate-400 hover:text-slate-600"
+              aria-label="Fechar aviso"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ================= CORPO ROLÁVEL DOS EXERCÍCIOS ================= */}
       <div className="flex-1 overflow-y-auto divide-y divide-slate-100 pb-36 max-w-3xl w-full mx-auto">
