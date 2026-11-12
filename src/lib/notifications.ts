@@ -210,8 +210,8 @@ export async function triggerImmediateRestNotification(
       const reg = await navigator.serviceWorker.ready;
       await reg.showNotification('Descanso Concluído! 🏋️', {
         body,
-        icon: '/apple-icon',
-        badge: '/apple-icon',
+        icon: '/icons/icon-192.png',
+        badge: '/icons/icon-192.png',
         tag: 'ironpulse-rest-timer',
       });
       return;
@@ -223,7 +223,7 @@ export async function triggerImmediateRestNotification(
   try {
     new Notification('Descanso Concluído! 🏋️', {
       body,
-      icon: '/apple-icon',
+      icon: '/icons/icon-192.png',
       tag: 'ironpulse-rest-timer',
     });
   } catch {

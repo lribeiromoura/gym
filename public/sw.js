@@ -37,8 +37,8 @@ self.addEventListener('message', (event) => {
         restTimerTimeoutId = null;
         self.registration.showNotification('Descanso Concluído! 🏋️', {
           body: `Hora da próxima série de ${exerciseTitle}!`,
-          icon: '/apple-icon',
-          badge: '/apple-icon',
+          icon: '/icons/icon-192.png',
+          badge: '/icons/icon-192.png',
           tag: 'ironpulse-rest-timer',
           renotify: true,
           requireInteraction: true,
@@ -86,8 +86,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(payload.title, {
       body: payload.body,
-      icon: '/apple-icon',
-      badge: '/apple-icon',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
       tag: 'ironpulse-rest-timer',
       renotify: true,
       requireInteraction: true,
