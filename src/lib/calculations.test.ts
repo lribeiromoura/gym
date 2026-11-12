@@ -9,6 +9,11 @@ import {
 } from './calculations';
 import { EXERCISES_SEED } from '@/data/exercises-seed';
 import { WorkoutSession } from '@/types/workout';
+import {
+  decodeShareToken,
+  encodeFolderShareToken,
+  encodeRoutineShareToken,
+} from './share';
 
 const SAMPLE_HISTORY: WorkoutSession[] = [
   {
@@ -113,5 +118,70 @@ describe('Motores de Cálculo IronPulse', () => {
     const csv = exportWorkoutsToCSV(SAMPLE_HISTORY, EXERCISES_SEED);
     expect(csv).toContain('title,start_time,end_time,description,exercise_title');
     expect(csv).toContain('Supino Reto (Barra)');
+  });
+
+  it('codifica e decodifica um link compartilhado de treino e pasta com exercícios customizados', () => {
+    const customExercise = {
+      id: 'ex-custom-123',
+      title: 'Supino Guilhotina Custom',
+      primaryMuscle: 'chest' as const,
+      secondaryMuscles: ['triceps' as const],
+      equipment: 'barbell' as const,
+      measurementType: 'weight_reps' as const,
+      instructions: ['Desça na linha clavicular'],
+      isCustom: true,
+    };
+
+    const sampleRoutine = {
+      id: 'r-1',
+      folderId: 'f-1',
+      title: 'Push Day Hipertrofia',
+      description: 'Foco em peitoral superior',
+      updatedAt: '2026-11-12T10:00:00Z',
+      exercises: [
+        {
+          id: 're-1',
+          exerciseId: 'ex-custom-123',
+          supersetId: null,
+          restTimerSeconds: 90,
+          notes: 'Segurar 1s embaixo',
+          sets: [
+            {
+              id: 's-1',
+              type: 'normal' as const,
+              weightKg: 40,
+              reps: 12,
+              completed: false,
+            },
+          ],
+        },
+      ],
+    };
+
+    // 1. Compartilhamento de Rotina
+    const routineToken = encodeRoutineShareToken(
+      sampleRoutine,
+      [...EXERCISES_SEED, customExercise],
+      'Leandro'
+    );
+    const decodedRoutine = decodeShareToken(routineToken);
+    expect(decodedRoutine).not.toBeNull();
+    expect(decodedRoutine?.k).toBe('routine');
+    expect(decodedRoutine?.by).toBe('Leandro');
+    expect(decodedRoutine?.r[0].t).toBe('Push Day Hipertrofia');
+    expect(decodedRoutine?.r[0].ex[0].s[0].w).toBe(40);
+    expect(decodedRoutine?.ce?.[0].t).toBe('Supino Guilhotina Custom');
+
+    // 2. Compartilhamento de Pasta
+    const folderToken = encodeFolderShareToken(
+      { id: 'f-1', name: 'Divisão ABC', order: 1 },
+      [sampleRoutine],
+      [...EXERCISES_SEED, customExercise],
+      'Leandro'
+    );
+    const decodedFolder = decodeShareToken(folderToken);
+    expect(decodedFolder?.k).toBe('folder');
+    expect(decodedFolder?.fn).toBe('Divisão ABC');
+    expect(decodedFolder?.r.length).toBe(1);
   });
 });

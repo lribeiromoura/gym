@@ -29,6 +29,7 @@ import {
   cancelRestNotification,
   scheduleRestNotification,
 } from '@/lib/notifications';
+import { SharePayload } from '@/lib/share';
 
 interface RestTimerState {
   isActive: boolean;
@@ -108,6 +109,10 @@ interface WorkoutStoreState {
   ) => void;
   duplicateRoutine: (routineId: string) => void;
   deleteRoutine: (routineId: string) => void;
+  importSharedPayload: (
+    payload: SharePayload,
+    options?: { startImmediately?: boolean; targetFolderId?: string | null }
+  ) => void;
 
   // Actions — Exercises
   addCustomExercise: (exercise: Omit<Exercise, 'id' | 'isCustom'>) => Exercise;
@@ -751,6 +756,87 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
 
       deleteRoutine: (routineId) => {
         set({ routines: get().routines.filter((r) => r.id !== routineId) });
+      },
+
+      importSharedPayload: (payload, options) => {
+        const state = get();
+        const existingExercises = [...state.exercises];
+        const existingExIds = new Set(existingExercises.map((e) => e.id));
+
+        // 1. Importa exercícios personalizados que ainda não existam na biblioteca local
+        if (payload.ce && payload.ce.length > 0) {
+          for (const ce of payload.ce) {
+            if (!existingExIds.has(ce.id)) {
+              existingExercises.unshift({
+                id: ce.id,
+                title: ce.t,
+                primaryMuscle: ce.pm,
+                secondaryMuscles: ce.sm || [],
+                equipment: ce.eq,
+                measurementType: ce.mt,
+                instructions: ce.in || [],
+                isCustom: true,
+              });
+              existingExIds.add(ce.id);
+            }
+          }
+        }
+
+        // 2. Se for pasta, cria a nova pasta
+        let targetFolderId: string | null =
+          options?.targetFolderId !== undefined ? options.targetFolderId : null;
+        const nextFolders = [...state.folders];
+
+        if (payload.k === 'folder') {
+          const newFolderId = uid('folder');
+          nextFolders.push({
+            id: newFolderId,
+            name: payload.fn || 'Pasta Importada',
+            order: nextFolders.length + 1,
+          });
+          targetFolderId = newFolderId;
+        }
+
+        // 3. Converte cada rotina compacta em Routine completa
+        const importedRoutines: Routine[] = payload.r.map((cr) => {
+          const exercises: WorkoutExercise[] = cr.ex.map((cex) => ({
+            id: uid('re'),
+            exerciseId: cex.e,
+            supersetId: cex.ss ?? null,
+            restTimerSeconds: cex.rt ?? 90,
+            notes: cex.n || '',
+            sets: cex.s.map((cs) => ({
+              id: uid('s'),
+              type: cs.t || 'normal',
+              weightKg: cs.w ?? null,
+              reps: cs.r ?? null,
+              distanceKm: cs.d ?? null,
+              durationSeconds: cs.s ?? null,
+              rpe: cs.rpe ?? null,
+              completed: false,
+            })),
+          }));
+
+          return {
+            id: uid('routine'),
+            folderId: targetFolderId,
+            title: cr.t || 'Treino Importado',
+            description: cr.d || '',
+            exercises,
+            updatedAt: new Date().toISOString(),
+          };
+        });
+
+        set({
+          exercises: existingExercises,
+          folders: nextFolders,
+          routines: [...importedRoutines, ...state.routines],
+        });
+
+        // 4. Se o usuário clicou em "Importar e Iniciar Treino Agora"
+        if (options?.startImmediately && importedRoutines[0]) {
+          get().startRoutineWorkout(importedRoutines[0].id);
+        }
       },
 
       // Exercises

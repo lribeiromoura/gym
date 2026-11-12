@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import {
+  Check,
   Copy,
   Dumbbell,
   Edit3,
@@ -11,6 +12,7 @@ import {
   Play,
   Plus,
   Search,
+  Share2,
   Trash2,
   X,
 } from 'lucide-react';
@@ -20,10 +22,17 @@ import {
   MUSCLE_LABELS,
   MuscleGroup,
   Routine,
+  RoutineFolder,
   SetType,
   WorkoutExercise,
 } from '@/types/workout';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
+import {
+  buildShareUrl,
+  encodeFolderShareToken,
+  encodeRoutineShareToken,
+  shareOrCopyLink,
+} from '@/lib/share';
 
 const uid = (p = 'id') =>
   `${p}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -35,6 +44,7 @@ export function RoutinesView() {
   const folders = useWorkoutStore((s) => s.folders);
   const routines = useWorkoutStore((s) => s.routines);
   const exercises = useWorkoutStore((s) => s.exercises);
+  const settings = useWorkoutStore((s) => s.settings);
 
   const startEmptyWorkout = useWorkoutStore((s) => s.startEmptyWorkout);
   const startRoutineWorkout = useWorkoutStore((s) => s.startRoutineWorkout);
@@ -47,6 +57,39 @@ export function RoutinesView() {
 
   const [showFolderModal, setShowFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
+  const [sharedFeedbackId, setSharedFeedbackId] = useState<string | null>(null);
+
+  const handleShareRoutine = async (routine: Routine) => {
+    const token = encodeRoutineShareToken(routine, exercises, settings.name);
+    const url = buildShareUrl(token);
+    await shareOrCopyLink({
+      title: `Treino: ${routine.title}`,
+      text: `Confira e importe o treino "${routine.title}" no IronPulse:`,
+      url,
+    });
+    setSharedFeedbackId(routine.id);
+    setTimeout(() => setSharedFeedbackId(null), 2500);
+  };
+
+  const handleShareFolder = async (
+    folder: RoutineFolder,
+    folderRoutines: Routine[]
+  ) => {
+    const token = encodeFolderShareToken(
+      folder,
+      folderRoutines,
+      exercises,
+      settings.name
+    );
+    const url = buildShareUrl(token);
+    await shareOrCopyLink({
+      title: `Pasta de Treinos: ${folder.name}`,
+      text: `Confira e importe a pasta "${folder.name}" (${folderRoutines.length} treinos) no IronPulse:`,
+      url,
+    });
+    setSharedFeedbackId(folder.id);
+    setTimeout(() => setSharedFeedbackId(null), 2500);
+  };
 
   const [editingRoutine, setEditingRoutine] = useState<{
     id?: string;
@@ -153,6 +196,23 @@ export function RoutinesView() {
             </div>
 
             <div className="flex items-center gap-1 shrink-0">
+              <button
+                onClick={() => handleShareRoutine(routine)}
+                title="Compartilhar Link do Treino"
+                className="px-2 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-[#0084FF] text-[11px] font-bold flex items-center gap-1 transition"
+              >
+                {sharedFeedbackId === routine.id ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="text-emerald-700">Link Copiado!</span>
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="w-3.5 h-3.5" />
+                    <span>Compartilhar</span>
+                  </>
+                )}
+              </button>
               <button
                 onClick={() => openEditRoutine(routine)}
                 title="Editar Rotina"
@@ -333,6 +393,28 @@ export function RoutinesView() {
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
+                    {folderRoutines.length > 0 && (
+                      <button
+                        onClick={() =>
+                          handleShareFolder(folder, folderRoutines)
+                        }
+                        title="Compartilhar Link da Pasta"
+                        className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-xs text-[#0084FF] font-bold flex items-center gap-1 transition"
+                      >
+                        {sharedFeedbackId === folder.id ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            <span className="text-emerald-700">
+                              Link Copiado!
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <Share2 className="w-3.5 h-3.5" /> Compartilhar Pasta
+                          </>
+                        )}
+                      </button>
+                    )}
                     <button
                       onClick={() => openNewRoutineEditor(folder.id)}
                       className="text-xs text-[#0084FF] hover:underline font-semibold flex items-center gap-1"

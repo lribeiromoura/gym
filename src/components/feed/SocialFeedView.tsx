@@ -10,12 +10,18 @@ import {
   Dumbbell,
   Edit3,
   Play,
+  Share2,
   Trash2,
   Trophy,
 } from 'lucide-react';
 import { MUSCLE_LABELS } from '@/types/workout';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import { calculate1RM, formatDuration } from '@/lib/calculations';
+import {
+  buildShareUrl,
+  encodeRoutineShareToken,
+  shareOrCopyLink,
+} from '@/lib/share';
 
 export function SocialFeedView() {
   const workoutHistory = useWorkoutStore((s) => s.workoutHistory);
@@ -37,6 +43,7 @@ export function SocialFeedView() {
     Record<string, boolean>
   >({});
   const [savedToastId, setSavedToastId] = useState<string | null>(null);
+  const [sharedSessionId, setSharedSessionId] = useState<string | null>(null);
 
   const exerciseMap = useMemo(
     () => new Map(exercises.map((e) => [e.id, e])),
@@ -125,7 +132,38 @@ export function SocialFeedView() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      onClick={async () => {
+                        const token = encodeRoutineShareToken(
+                          w,
+                          exercises,
+                          settings.name
+                        );
+                        const url = buildShareUrl(token);
+                        await shareOrCopyLink({
+                          title: `Treino: ${w.title}`,
+                          text: `Confira e importe meu treino "${w.title}" no IronPulse:`,
+                          url,
+                        });
+                        setSharedSessionId(w.id);
+                        setTimeout(() => setSharedSessionId(null), 2500);
+                      }}
+                      title="Compartilhar Link deste Treino"
+                      className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-xs font-bold text-[#0084FF] flex items-center gap-1.5 transition"
+                    >
+                      {sharedSessionId === w.id ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />{' '}
+                          Link Copiado!
+                        </>
+                      ) : (
+                        <>
+                          <Share2 className="w-3.5 h-3.5" /> Compartilhar
+                        </>
+                      )}
+                    </button>
+
                     <button
                       onClick={() => startEditWorkoutSession(w.id)}
                       title="Alterar / Editar este treino"

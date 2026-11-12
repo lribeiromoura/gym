@@ -13,15 +13,18 @@ import {
 } from 'lucide-react';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import { RoutinesView } from '@/components/routines/RoutinesView';
+import { SharedImportModal } from '@/components/routines/SharedImportModal';
 import { SocialFeedView } from '@/components/feed/SocialFeedView';
 import { ExercisesView } from '@/components/exercises/ExercisesView';
 import { ProfileAnalyticsView } from '@/components/profile/ProfileAnalyticsView';
 import { ActiveWorkoutDrawer } from '@/components/workout/ActiveWorkoutDrawer';
+import { decodeShareToken, SharePayload } from '@/lib/share';
 
 type MainTab = 'workout' | 'feed' | 'exercises' | 'profile';
 
 export default function IronPulseAppPage() {
   const [activeTab, setActiveTab] = useState<MainTab>('workout');
+  const [sharedPayload, setSharedPayload] = useState<SharePayload | null>(null);
   const activeWorkout = useWorkoutStore((s) => s.activeWorkout);
   const startEmptyWorkout = useWorkoutStore((s) => s.startEmptyWorkout);
   const toggleMinimizeWorkout = useWorkoutStore((s) => s.toggleMinimizeWorkout);
@@ -31,7 +34,26 @@ export default function IronPulseAppPage() {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
+
+    // Verifica se o link aberto contém um treino ou pasta compartilhada (?share=...)
+    const params = new URLSearchParams(window.location.search);
+    const shareToken = params.get('share');
+    if (shareToken) {
+      const decoded = decodeShareToken(shareToken);
+      if (decoded) {
+        setSharedPayload(decoded);
+      }
+    }
   }, []);
+
+  const clearShareUrlParam = () => {
+    setSharedPayload(null);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('share');
+      window.history.replaceState({}, '', url.toString());
+    }
+  };
 
   const navItems: {
     id: MainTab;
@@ -186,6 +208,16 @@ export default function IronPulseAppPage() {
 
       {/* Drawer Persistente do Workout Logger ao Vivo / Edição */}
       <ActiveWorkoutDrawer />
+
+      {/* Modal de Visualização e Importação de Treino / Pasta Compartilhada via Link */}
+      <SharedImportModal
+        payload={sharedPayload}
+        onClose={clearShareUrlParam}
+        onImported={() => {
+          clearShareUrlParam();
+          setActiveTab('workout');
+        }}
+      />
     </div>
   );
 }
