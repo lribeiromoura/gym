@@ -44,22 +44,24 @@ export default function IronPulseAppPage() {
     { id: 'profile', label: 'Perfil & Analytics', icon: User },
   ];
 
+  const isMinimized = Boolean(activeWorkout?.isMinimized);
+
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-[#090A0F]">
+    <div className="min-h-screen flex flex-col md:flex-row bg-[#F8FAFC] text-slate-900">
       {/* Sidebar Desktop */}
-      <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 bg-[#0E1017] border-r border-slate-800/80 p-5 justify-between z-30">
+      <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 bg-white border-r border-slate-200 p-5 justify-between z-30">
         <div className="space-y-6">
           {/* Logo IronPulse */}
           <div className="flex items-center justify-between px-2">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-[#1D8FE1] flex items-center justify-center text-white font-black text-sm shadow-lg shadow-[#1D8FE1]/30">
+              <div className="w-9 h-9 rounded-xl bg-[#0084FF] flex items-center justify-center text-white font-black text-sm shadow-md shadow-[#0084FF]/25">
                 IP
               </div>
               <div>
-                <span className="text-xl font-black tracking-tight text-white">
+                <span className="text-xl font-black tracking-tight text-slate-900">
                   IRONPULSE
                 </span>
-                <span className="block text-[10px] uppercase tracking-widest text-[#38BDF8] font-bold -mt-1">
+                <span className="block text-[10px] uppercase tracking-widest text-[#0084FF] font-bold -mt-1">
                   Workout Tracker
                 </span>
               </div>
@@ -69,14 +71,14 @@ export default function IronPulseAppPage() {
           {activeWorkout ? (
             <button
               onClick={() => toggleMinimizeWorkout(false)}
-              className="w-full py-3 px-4 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-extrabold text-xs flex items-center justify-center gap-2 animate-pulse"
+              className="w-full py-3 px-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 font-extrabold text-xs flex items-center justify-center gap-2"
             >
-              <Flame className="w-4 h-4" /> Retomar Treino Ativo
+              <Flame className="w-4 h-4 text-emerald-600" /> Retomar Treino Ativo
             </button>
           ) : (
             <button
               onClick={() => startEmptyWorkout('Treino Livre')}
-              className="w-full py-3 px-4 rounded-xl bg-[#1D8FE1] hover:bg-[#167AC6] text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#1D8FE1]/25 transition"
+              className="w-full py-3 px-4 rounded-xl bg-[#0084FF] hover:bg-blue-600 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-md shadow-[#0084FF]/20 transition"
             >
               <Play className="w-4 h-4 fill-current" /> + Iniciar Treino
             </button>
@@ -92,8 +94,8 @@ export default function IronPulseAppPage() {
                   onClick={() => setActiveTab(item.id)}
                   className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm font-bold transition ${
                     isActive
-                      ? 'bg-[#1D8FE1]/15 text-[#38BDF8] border border-[#1D8FE1]/30'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
+                      ? 'bg-[#0084FF]/10 text-[#0084FF]'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                   }`}
                 >
                   <Icon className="w-5 h-5" />
@@ -104,20 +106,20 @@ export default function IronPulseAppPage() {
           </nav>
         </div>
 
-        <div className="bg-[#141824] border border-slate-800/90 rounded-2xl p-4 space-y-2">
+        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-400 font-semibold flex items-center gap-1">
-              <Trophy className="w-3.5 h-3.5 text-amber-400" /> Total de Sessões
+            <span className="text-slate-500 font-semibold flex items-center gap-1">
+              <Trophy className="w-3.5 h-3.5 text-amber-500" /> Total de Sessões
             </span>
-            <span className="font-extrabold text-white">
+            <span className="font-extrabold text-slate-900">
               {workoutHistory.length}
             </span>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-400 font-semibold flex items-center gap-1">
-              <BarChart3 className="w-3.5 h-3.5 text-[#38BDF8]" /> PRs Históricos
+            <span className="text-slate-500 font-semibold flex items-center gap-1">
+              <BarChart3 className="w-3.5 h-3.5 text-[#0084FF]" /> PRs Históricos
             </span>
-            <span className="font-extrabold text-amber-400">
+            <span className="font-extrabold text-amber-600">
               {workoutHistory.reduce((acc, w) => acc + w.prCount, 0)}
             </span>
           </div>
@@ -125,12 +127,12 @@ export default function IronPulseAppPage() {
       </aside>
 
       {/* Top Header Mobile com suporte a Safe Area do iPhone */}
-      <header className="md:hidden sticky top-0 z-30 bg-[#0E1017]/95 backdrop-blur-md border-b border-slate-800 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 flex items-center justify-between">
+      <header className="md:hidden sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-[#1D8FE1] flex items-center justify-center text-white font-black text-xs">
+          <div className="w-8 h-8 rounded-lg bg-[#0084FF] flex items-center justify-center text-white font-black text-xs shadow-sm">
             IP
           </div>
-          <span className="text-lg font-black tracking-tight text-white">
+          <span className="text-lg font-black tracking-tight text-slate-900">
             IRONPULSE
           </span>
         </div>
@@ -138,14 +140,14 @@ export default function IronPulseAppPage() {
         {activeWorkout ? (
           <button
             onClick={() => toggleMinimizeWorkout(false)}
-            className="px-3 py-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold"
+            className="px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold"
           >
             Treino Ativo
           </button>
         ) : (
           <button
             onClick={() => startEmptyWorkout('Treino Livre')}
-            className="px-3 py-1.5 rounded-lg bg-[#1D8FE1] text-white text-xs font-bold flex items-center gap-1"
+            className="px-4 py-1.5 rounded-full bg-[#0084FF] text-white text-xs font-bold flex items-center gap-1 shadow-sm"
           >
             <Play className="w-3 h-3 fill-current" /> Treinar
           </button>
@@ -153,7 +155,7 @@ export default function IronPulseAppPage() {
       </header>
 
       {/* Área Principal de Conteúdo */}
-      <main className="flex-1 md:pl-64">
+      <main className={`flex-1 md:pl-64 ${isMinimized ? 'pb-20' : ''}`}>
         <div className="max-w-5xl mx-auto p-4 sm:p-6 md:p-8">
           {activeTab === 'workout' && <RoutinesView />}
           {activeTab === 'feed' && <SocialFeedView />}
@@ -163,7 +165,7 @@ export default function IronPulseAppPage() {
       </main>
 
       {/* Barra de Navegação Inferior Mobile com Safe Area do iPhone */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-[#0E1017]/95 backdrop-blur-md border-t border-slate-800 grid grid-cols-4 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] px-2">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 grid grid-cols-4 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] px-2">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -172,7 +174,7 @@ export default function IronPulseAppPage() {
               key={item.id}
               onClick={() => setActiveTab(item.id)}
               className={`flex flex-col items-center justify-center py-1.5 rounded-xl text-[11px] font-bold transition ${
-                isActive ? 'text-[#38BDF8]' : 'text-slate-400 hover:text-white'
+                isActive ? 'text-[#0084FF]' : 'text-slate-400 hover:text-slate-700'
               }`}
             >
               <Icon className="w-5 h-5 mb-0.5" />

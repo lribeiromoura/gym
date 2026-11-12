@@ -2,26 +2,23 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  ArrowDown,
-  ArrowUp,
+  AlarmClock,
+  ArrowUpDown,
   Award,
-  Calculator,
   Check,
   ChevronDown,
   ChevronUp,
   Clock,
-  Disc,
   Dumbbell,
-  Flame,
-  Layers,
-  Minus,
+  FilePlus2,
+  Gauge,
   Plus,
   RefreshCw,
   Search,
   Timer,
   Trash2,
   Trophy,
-  Volume2,
+  MoreVertical,
   X,
 } from 'lucide-react';
 import {
@@ -37,39 +34,37 @@ import { useWorkoutStore } from '@/store/useWorkoutStore';
 import {
   calculate1RM,
   calculateMuscleDistribution,
-  calculatePlates,
   formatDuration,
   formatTimerClock,
-  generateWarmupSets,
   getPreviousExerciseSets,
 } from '@/lib/calculations';
 import { ExerciseDetailModal } from '@/components/exercises/ExerciseDetailModal';
 import { BodyHeatmapSVG } from '@/components/analytics/BodyHeatmapSVG';
 
-const SUPERSET_COLORS: Record<
-  number,
-  { border: string; badge: string; label: string }
-> = {
-  1: {
-    border: 'border-l-4 border-l-purple-500',
-    badge: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
-    label: 'Superset A',
-  },
-  2: {
-    border: 'border-l-4 border-l-emerald-500',
-    badge: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
-    label: 'Superset B',
-  },
-  3: {
-    border: 'border-l-4 border-l-amber-500',
-    badge: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-    label: 'Superset C',
-  },
-};
-
 const RPE_OPTIONS: RPEValue[] = [null, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10];
 const MUSCLE_OPTIONS = Object.keys(MUSCLE_LABELS) as MuscleGroup[];
 const EQUIPMENT_OPTIONS = Object.keys(EQUIPMENT_LABELS) as EquipmentType[];
+
+function formatRestLabel(seconds: number): string {
+  if (!seconds || seconds <= 0) return 'Desligado';
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (mins > 0 && secs > 0) return `${mins}min ${secs}s`;
+  if (mins > 0) return `${mins}min`;
+  return `${secs}s`;
+}
+
+function formatShortElapsed(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (mins < 60) {
+    return secs > 0 ? `${mins}min ${secs}s` : `${mins}min`;
+  }
+  const hrs = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  return `${hrs}h ${remMins}min`;
+}
 
 function playTimerBeep() {
   try {
@@ -102,6 +97,245 @@ function playTimerBeep() {
   }
 }
 
+/**
+ * Mini silhueta anatômica (frente e costas) para a barra de estatísticas do treino
+ */
+function MiniAnatomyFigures({
+  activeMuscles,
+}: {
+  activeMuscles: Set<MuscleGroup>;
+}) {
+  const isChest = activeMuscles.has('chest');
+  const isShoulders = activeMuscles.has('shoulders');
+  const isArms = activeMuscles.has('biceps') || activeMuscles.has('triceps');
+  const isAbs = activeMuscles.has('abs');
+  const isQuads = activeMuscles.has('quads');
+  const isBack =
+    activeMuscles.has('lats') ||
+    activeMuscles.has('upper_back') ||
+    activeMuscles.has('lower_back') ||
+    activeMuscles.has('traps');
+  const isGlutesHamstrings =
+    activeMuscles.has('glutes') || activeMuscles.has('hamstrings');
+  const isCalves = activeMuscles.has('calves');
+
+  const hi = '#0084FF';
+  const base = '#CBD5E1';
+
+  return (
+    <div className="flex items-center gap-1.5 select-none">
+      {/* Frente */}
+      <svg viewBox="0 0 60 120" className="w-6 h-11">
+        <circle cx="30" cy="11" r="7" fill="#94A3B8" />
+        {/* Ombros */}
+        <rect
+          x="11"
+          y="21"
+          width="8"
+          height="13"
+          rx="4"
+          fill={isShoulders ? hi : base}
+        />
+        <rect
+          x="41"
+          y="21"
+          width="8"
+          height="13"
+          rx="4"
+          fill={isShoulders ? hi : base}
+        />
+        {/* Peito */}
+        <rect
+          x="19"
+          y="20"
+          width="22"
+          height="14"
+          rx="3"
+          fill={isChest ? hi : base}
+        />
+        {/* Abdômen */}
+        <rect
+          x="21"
+          y="36"
+          width="18"
+          height="20"
+          rx="3"
+          fill={isAbs ? hi : base}
+        />
+        {/* Braços */}
+        <rect
+          x="9"
+          y="35"
+          width="7"
+          height="22"
+          rx="3"
+          fill={isArms ? hi : base}
+        />
+        <rect
+          x="44"
+          y="35"
+          width="7"
+          height="22"
+          rx="3"
+          fill={isArms ? hi : base}
+        />
+        {/* Quadríceps */}
+        <rect
+          x="19"
+          y="58"
+          width="9"
+          height="27"
+          rx="4"
+          fill={isQuads ? hi : base}
+        />
+        <rect
+          x="32"
+          y="58"
+          width="9"
+          height="27"
+          rx="4"
+          fill={isQuads ? hi : base}
+        />
+        {/* Panturrilhas */}
+        <rect
+          x="20"
+          y="87"
+          width="7"
+          height="24"
+          rx="3"
+          fill={isCalves ? hi : base}
+        />
+        <rect
+          x="33"
+          y="87"
+          width="7"
+          height="24"
+          rx="3"
+          fill={isCalves ? hi : base}
+        />
+      </svg>
+
+      {/* Costas */}
+      <svg viewBox="0 0 60 120" className="w-6 h-11">
+        <circle cx="30" cy="11" r="7" fill="#94A3B8" />
+        {/* Ombros post */}
+        <rect
+          x="11"
+          y="21"
+          width="8"
+          height="13"
+          rx="4"
+          fill={isShoulders ? hi : base}
+        />
+        <rect
+          x="41"
+          y="21"
+          width="8"
+          height="13"
+          rx="4"
+          fill={isShoulders ? hi : base}
+        />
+        {/* Dorsais / Costas */}
+        <rect
+          x="19"
+          y="20"
+          width="22"
+          height="34"
+          rx="4"
+          fill={isBack ? hi : base}
+        />
+        {/* Braços */}
+        <rect
+          x="9"
+          y="35"
+          width="7"
+          height="22"
+          rx="3"
+          fill={isArms ? hi : base}
+        />
+        <rect
+          x="44"
+          y="35"
+          width="7"
+          height="22"
+          rx="3"
+          fill={isArms ? hi : base}
+        />
+        {/* Glúteos e Posterior */}
+        <rect
+          x="19"
+          y="56"
+          width="9"
+          height="29"
+          rx="4"
+          fill={isGlutesHamstrings ? hi : base}
+        />
+        <rect
+          x="32"
+          y="56"
+          width="9"
+          height="29"
+          rx="4"
+          fill={isGlutesHamstrings ? hi : base}
+        />
+        {/* Panturrilhas */}
+        <rect
+          x="20"
+          y="87"
+          width="7"
+          height="24"
+          rx="3"
+          fill={isCalves ? hi : base}
+        />
+        <rect
+          x="33"
+          y="87"
+          width="7"
+          height="24"
+          rx="3"
+          fill={isCalves ? hi : base}
+        />
+      </svg>
+    </div>
+  );
+}
+
+/**
+ * Avatar ilustrativo do exercício no estilo circular limpo
+ */
+function ExerciseIllustrationBadge({ muscle }: { muscle?: MuscleGroup }) {
+  return (
+    <div className="w-11 h-11 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 overflow-hidden">
+      <svg viewBox="0 0 48 48" className="w-8 h-8">
+        {/* Banco / Máquina estilizada */}
+        <rect x="10" y="32" width="28" height="4" rx="2" fill="#64748B" />
+        <rect x="14" y="12" width="4" height="22" rx="1.5" fill="#94A3B8" />
+        {/* Silhueta com destaque laranja/azul no músculo */}
+        <circle cx="26" cy="14" r="4" fill="#334155" />
+        <rect
+          x="22"
+          y="19"
+          width="9"
+          height="12"
+          rx="3"
+          fill={muscle === 'chest' ? '#F97316' : '#0084FF'}
+        />
+        <line
+          x1="18"
+          y1="22"
+          x2="36"
+          y2="22"
+          stroke="#0F172A"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+        />
+        <circle cx="17" cy="22" r="3.5" fill="#1E293B" />
+        <circle cx="37" cy="22" r="3.5" fill="#1E293B" />
+      </svg>
+    </div>
+  );
+}
+
 export function ActiveWorkoutDrawer() {
   const activeWorkout = useWorkoutStore((s) => s.activeWorkout);
   const exercises = useWorkoutStore((s) => s.exercises);
@@ -111,9 +345,6 @@ export function ActiveWorkoutDrawer() {
   const lastFinishedWorkout = useWorkoutStore((s) => s.lastFinishedWorkout);
 
   const toggleMinimizeWorkout = useWorkoutStore((s) => s.toggleMinimizeWorkout);
-  const updateActiveWorkoutMeta = useWorkoutStore(
-    (s) => s.updateActiveWorkoutMeta
-  );
   const addExerciseToActiveWorkout = useWorkoutStore(
     (s) => s.addExerciseToActiveWorkout
   );
@@ -159,14 +390,25 @@ export function ActiveWorkoutDrawer() {
   const [quickExEquip, setQuickExEquip] = useState<EquipmentType>('barbell');
 
   const [inspectExercise, setInspectExercise] = useState<Exercise | null>(null);
-  const [plateCalcModal, setPlateCalcModal] = useState<{
-    weightKg: number;
-    workoutExerciseId?: string;
-  } | null>(null);
-  const [barWeightKg, setBarWeightKg] = useState(
-    settings.defaultBarWeightKg || 20
-  );
   const [showFinishModal, setShowFinishModal] = useState(false);
+
+  // Estado do Bottom Sheet de 3 pontinhos (⋮) idêntico à imagem 1
+  const [menuWorkoutExerciseId, setMenuWorkoutExerciseId] = useState<
+    string | null
+  >(null);
+
+  // Estado do Modal de Reordenação
+  const [showReorderSheet, setShowReorderSheet] = useState(false);
+
+  // Estado de quais exercícios estão com o campo de Nota aberto
+  const [openNotesIds, setOpenNotesIds] = useState<Record<string, boolean>>({});
+
+  // Estado de seletor de RPE ativo para uma série específica
+  const [activeRpePicker, setActiveRpePicker] = useState<{
+    workoutExerciseId: string;
+    setId: string;
+    currentRpe: RPEValue;
+  } | null>(null);
 
   const isEditingSession = !!activeWorkout?.editingSessionId;
 
@@ -211,23 +453,45 @@ export function ActiveWorkoutDrawer() {
   );
 
   const liveStats = useMemo(() => {
-    if (!activeWorkout) return { volumeKg: 0, completedSets: 0, totalSets: 0 };
+    if (!activeWorkout)
+      return {
+        volumeKg: 0,
+        completedSets: 0,
+        totalSets: 0,
+        activeMuscles: new Set<MuscleGroup>(),
+      };
     let volumeKg = 0;
     let completedSets = 0;
     let totalSets = 0;
+    const activeMuscles = new Set<MuscleGroup>();
+
     for (const ex of activeWorkout.exercises) {
+      const meta = exerciseMap.get(ex.exerciseId);
+      let hasCompletedInEx = false;
       for (const s of ex.sets) {
         totalSets += 1;
         if (s.completed) {
           completedSets += 1;
+          hasCompletedInEx = true;
           if (s.type !== 'warmup') {
             volumeKg += (s.weightKg ?? 0) * (s.reps ?? 0);
           }
         }
       }
+      if (meta && (hasCompletedInEx || activeWorkout.exercises.length > 0)) {
+        if (hasCompletedInEx) {
+          activeMuscles.add(meta.primaryMuscle);
+          meta.secondaryMuscles.forEach((m) => activeMuscles.add(m));
+        }
+      }
     }
-    return { volumeKg: Math.round(volumeKg), completedSets, totalSets };
-  }, [activeWorkout]);
+    return {
+      volumeKg: Math.round(volumeKg),
+      completedSets,
+      totalSets,
+      activeMuscles,
+    };
+  }, [activeWorkout, exerciseMap]);
 
   const cycleSetType = (current: SetType): SetType => {
     const order: SetType[] = ['normal', 'warmup', 'dropset', 'failure'];
@@ -235,81 +499,59 @@ export function ActiveWorkoutDrawer() {
     return order[nextIdx];
   };
 
+  const cycleRestTime = (currentSeconds: number): number => {
+    const options = [0, 45, 60, 90, 120, 150, 180];
+    const idx = options.indexOf(currentSeconds);
+    return options[(idx + 1) % options.length];
+  };
+
+  // Modal de celebração pós-treino
   if (!activeWorkout && lastFinishedWorkout) {
     const finishedMuscleDist = calculateMuscleDistribution(
       [lastFinishedWorkout],
       exercises
     );
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
-        <div className="bg-[#12151F] border border-slate-800 rounded-3xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 space-y-6 shadow-2xl animate-fadeIn">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+        <div className="bg-white text-slate-900 rounded-3xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 space-y-6 shadow-2xl animate-fadeIn">
           <div className="text-center space-y-2">
-            <div className="w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center mx-auto shadow-lg shadow-amber-500/10">
+            <div className="w-16 h-16 rounded-2xl bg-amber-100 border border-amber-300 text-amber-500 flex items-center justify-center mx-auto">
               <Trophy className="w-9 h-9" />
             </div>
-            <span className="px-3 py-1 rounded-full bg-[#1D8FE1]/20 text-[#38BDF8] text-xs font-bold uppercase tracking-wider inline-block">
+            <span className="px-3 py-1 rounded-full bg-blue-50 text-[#0084FF] text-xs font-bold uppercase tracking-wider inline-block">
               Treino #{workoutHistory.length} Concluído!
             </span>
-            <h2 className="text-2xl font-extrabold text-white">
+            <h2 className="text-2xl font-extrabold text-slate-900">
               {lastFinishedWorkout.title}
             </h2>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500">
               Excelente trabalho! Seu treino foi salvo no seu histórico.
             </p>
           </div>
 
           <div className="grid grid-cols-3 gap-3">
-            <div className="bg-[#0B0D14] border border-slate-800 rounded-2xl p-3 text-center">
-              <span className="text-[11px] text-slate-400">Volume Total</span>
-              <p className="text-base font-extrabold text-white mt-0.5">
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-center">
+              <span className="text-[11px] text-slate-500">Volume Total</span>
+              <p className="text-base font-extrabold text-slate-900 mt-0.5">
                 {lastFinishedWorkout.totalVolumeKg.toLocaleString('pt-BR')} kg
               </p>
             </div>
-            <div className="bg-[#0B0D14] border border-slate-800 rounded-2xl p-3 text-center">
-              <span className="text-[11px] text-slate-400">Duração</span>
-              <p className="text-base font-extrabold text-[#38BDF8] mt-0.5">
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-center">
+              <span className="text-[11px] text-slate-500">Duração</span>
+              <p className="text-base font-extrabold text-[#0084FF] mt-0.5">
                 {formatDuration(lastFinishedWorkout.durationSeconds)}
               </p>
             </div>
-            <div className="bg-[#0B0D14] border border-slate-800 rounded-2xl p-3 text-center">
-              <span className="text-[11px] text-slate-400">Recordes (PRs)</span>
-              <p className="text-base font-extrabold text-amber-400 mt-0.5 flex items-center justify-center gap-1">
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-center">
+              <span className="text-[11px] text-slate-500">Recordes (PRs)</span>
+              <p className="text-base font-extrabold text-amber-500 mt-0.5 flex items-center justify-center gap-1">
                 <Award className="w-4 h-4" /> {lastFinishedWorkout.prCount}
               </p>
             </div>
           </div>
 
-          {lastFinishedWorkout.prCount > 0 && (
-            <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 space-y-2.5">
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
-                <Trophy className="w-4 h-4" /> Novos Recordes Pessoais Batidos
-              </h3>
-              <div className="space-y-1.5">
-                {lastFinishedWorkout.exercises.map((ex) => {
-                  const meta = exerciseMap.get(ex.exerciseId);
-                  return ex.sets
-                    .filter((s) => s.prs && s.prs.length > 0)
-                    .map((s) => (
-                      <div
-                        key={s.id}
-                        className="flex items-center justify-between text-xs bg-[#0B0D14]/80 px-3 py-2 rounded-xl"
-                      >
-                        <span className="font-bold text-white">
-                          {meta?.title}
-                        </span>
-                        <span className="text-amber-300 font-semibold">
-                          {s.weightKg}kg × {s.reps} reps (1RM:{' '}
-                          {calculate1RM(s.weightKg, s.reps)}kg)
-                        </span>
-                      </div>
-                    ));
-                })}
-              </div>
-            </div>
-          )}
-
-          <div className="bg-[#0B0D14] border border-slate-800 rounded-2xl p-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 text-center mb-2">
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 text-center mb-2">
               Músculos Trabalhados na Sessão
             </h3>
             <BodyHeatmapSVG muscleScores={finishedMuscleDist} compact />
@@ -317,7 +559,7 @@ export function ActiveWorkoutDrawer() {
 
           <button
             onClick={clearLastFinishedWorkout}
-            className="w-full py-3.5 rounded-2xl bg-[#1D8FE1] hover:bg-[#167AC6] text-white font-extrabold text-sm shadow-lg shadow-[#1D8FE1]/25 transition"
+            className="w-full py-3.5 rounded-2xl bg-[#0084FF] hover:bg-blue-600 text-white font-extrabold text-sm shadow-lg shadow-blue-500/25 transition"
           >
             Fechar Resumo
           </button>
@@ -328,27 +570,28 @@ export function ActiveWorkoutDrawer() {
 
   if (!activeWorkout) return null;
 
+  // Mini-Player quando minimizado
   if (activeWorkout.isMinimized) {
     return (
       <div className="fixed bottom-20 md:bottom-4 left-2 right-2 md:left-72 md:right-6 z-40">
-        <div className="bg-[#141926]/95 backdrop-blur-md border border-[#1D8FE1]/50 rounded-2xl p-3.5 shadow-2xl flex items-center justify-between gap-3">
+        <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-2xl flex items-center justify-between gap-3">
           <div
             onClick={() => toggleMinimizeWorkout(false)}
             className="flex items-center gap-3 cursor-pointer flex-1 min-w-0"
           >
-            <div className="w-10 h-10 rounded-xl bg-[#1D8FE1] text-white flex items-center justify-center shrink-0 animate-pulse">
+            <div className="w-10 h-10 rounded-full bg-[#0084FF] text-white flex items-center justify-center shrink-0">
               <Dumbbell className="w-5 h-5" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-extrabold uppercase tracking-wider text-[#38BDF8]">
-                  {isEditingSession ? 'Editando Treino' : 'Treino em Andamento'}
+                <span className="text-xs font-bold text-[#0084FF]">
+                  Treino em Andamento
                 </span>
-                <span className="text-xs font-mono font-bold text-emerald-400">
-                  {formatTimerClock(elapsedSeconds)}
+                <span className="text-xs font-mono font-semibold text-slate-500">
+                  {formatShortElapsed(elapsedSeconds)}
                 </span>
               </div>
-              <p className="text-sm font-bold text-white truncate">
+              <p className="text-sm font-bold text-slate-900 truncate">
                 {activeWorkout.title}
               </p>
             </div>
@@ -356,14 +599,14 @@ export function ActiveWorkoutDrawer() {
 
           <div className="flex items-center gap-2 shrink-0">
             {restTimer.isActive && (
-              <div className="px-3 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-mono font-bold flex items-center gap-1.5">
+              <div className="px-3 py-1.5 rounded-xl bg-blue-50 text-[#0084FF] text-xs font-mono font-bold flex items-center gap-1">
                 <Timer className="w-3.5 h-3.5" />
                 {formatTimerClock(restTimer.remainingSeconds)}
               </div>
             )}
             <button
               onClick={() => toggleMinimizeWorkout(false)}
-              className="px-3.5 py-2 rounded-xl bg-[#1D8FE1] hover:bg-[#167AC6] text-white text-xs font-bold flex items-center gap-1"
+              className="px-4 py-2 rounded-full bg-[#0084FF] text-white text-xs font-bold flex items-center gap-1"
             >
               <ChevronUp className="w-4 h-4" /> Abrir
             </button>
@@ -373,326 +616,209 @@ export function ActiveWorkoutDrawer() {
     );
   }
 
-  const plateBreakdown = plateCalcModal
-    ? calculatePlates(plateCalcModal.weightKg, barWeightKg)
-    : null;
-  const warmupSuggestions = plateCalcModal
-    ? generateWarmupSets(plateCalcModal.weightKg, barWeightKg)
-    : [];
+  const progressRatio =
+    liveStats.totalSets > 0
+      ? Math.min(100, (liveStats.completedSets / liveStats.totalSets) * 100)
+      : 8;
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#090A0F] flex flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-      {/* Top Bar Fixa do Logger */}
-      <div className="bg-[#12151F] border-b border-slate-800 px-4 py-3 flex items-center justify-between gap-2 shrink-0">
-        <button
-          onClick={() => toggleMinimizeWorkout(true)}
-          className="px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
-        >
-          <ChevronDown className="w-4 h-4" />
-          <span className="hidden sm:inline">Minimizar</span>
-        </button>
-
-        <div className="flex items-center gap-4 sm:gap-6 text-xs">
-          <div className="text-center">
-            <span className="text-[10px] uppercase tracking-wider text-slate-400 block">
-              {isEditingSession ? 'Modo Edição' : 'Duração'}
-            </span>
-            <span className="font-mono font-extrabold text-sm text-[#38BDF8]">
-              {formatTimerClock(elapsedSeconds)}
-            </span>
-          </div>
-          <div className="text-center">
-            <span className="text-[10px] uppercase tracking-wider text-slate-400 block">
-              Volume
-            </span>
-            <span className="font-extrabold text-sm text-white">
-              {liveStats.volumeKg.toLocaleString('pt-BR')} kg
-            </span>
-          </div>
-          <div className="text-center">
-            <span className="text-[10px] uppercase tracking-wider text-slate-400 block">
-              Séries
-            </span>
-            <span className="font-extrabold text-sm text-emerald-400">
-              {liveStats.completedSets}/{liveStats.totalSets}
-            </span>
-          </div>
+    <div className="fixed inset-0 z-50 bg-white text-slate-900 flex flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+      {/* ================= TOP HEADER (Idêntico às imagens de referência) ================= */}
+      <div className="bg-white px-4 py-3 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => toggleMinimizeWorkout(true)}
+            aria-label="Minimizar treino"
+            className="w-10 h-10 rounded-full bg-[#F1F5F9] hover:bg-slate-200 flex items-center justify-center text-slate-800 transition"
+          >
+            <ChevronDown className="w-5 h-5 stroke-[2.2]" />
+          </button>
+          <span className="text-[17px] font-medium text-slate-900">
+            {isEditingSession ? 'Editar Treino' : 'Treino'}
+          </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          {!isEditingSession && (
-            <button
-              onClick={() =>
-                startRestTimer(settings.defaultRestSeconds, 'Descanso Manual')
-              }
-              title="Iniciar Timer de Descanso"
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-[#38BDF8] transition"
-            >
-              <Timer className="w-4 h-4" />
-            </button>
-          )}
+        <div className="flex items-center gap-3">
           <button
             onClick={() =>
-              isEditingSession ? finishActiveWorkout(false) : setShowFinishModal(true)
+              startRestTimer(settings.defaultRestSeconds, 'Descanso')
             }
-            className="px-4 py-2 rounded-xl bg-[#1D8FE1] hover:bg-[#167AC6] text-white font-extrabold text-xs sm:text-sm shadow-lg shadow-[#1D8FE1]/25 transition"
+            aria-label="Timer de descanso"
+            className="w-10 h-10 rounded-full bg-[#F1F5F9] hover:bg-slate-200 flex items-center justify-center text-slate-800 transition"
           >
-            {isEditingSession ? 'Salvar Alterações' : 'Finalizar'}
+            <AlarmClock className="w-5 h-5 stroke-[2]" />
+          </button>
+          <button
+            onClick={() =>
+              isEditingSession
+                ? finishActiveWorkout(false)
+                : setShowFinishModal(true)
+            }
+            className="px-5 py-2.5 rounded-full bg-[#0084FF] hover:bg-blue-600 text-white font-semibold text-[15px] shadow-sm transition"
+          >
+            Concluir
           </button>
         </div>
       </div>
 
-      {/* Banner de Timer de Descanso Ativo */}
-      {restTimer.isActive && (
-        <div className="bg-[#161E2E] border-b border-[#1D8FE1]/40 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-3">
-            <Volume2 className="w-4 h-4 text-[#38BDF8] animate-bounce" />
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-white">
-                  Descanso: {formatTimerClock(restTimer.remainingSeconds)}
-                </span>
-                {restTimer.exerciseTitle && (
-                  <span className="text-[11px] text-slate-400">
-                    ({restTimer.exerciseTitle})
-                  </span>
-                )}
-              </div>
-              <div className="w-44 sm:w-64 h-1.5 bg-slate-800 rounded-full overflow-hidden mt-1">
-                <div
-                  className="h-full bg-[#1D8FE1] transition-all duration-500"
-                  style={{
-                    width: `${Math.min(
-                      100,
-                      (restTimer.remainingSeconds /
-                        Math.max(1, restTimer.totalSeconds)) *
-                        100
-                    )}%`,
-                  }}
-                />
-              </div>
+      {/* Linha de progresso azul fina logo abaixo do header */}
+      <div className="w-full h-[2px] bg-slate-100 shrink-0">
+        <div
+          className="h-full bg-[#0084FF] transition-all duration-300"
+          style={{ width: `${Math.max(8, progressRatio)}%` }}
+        />
+      </div>
+
+      {/* ================= SUB-BARRA DE MÉTRICAS (Duração | Volume | Séries | Silhueta) ================= */}
+      <div className="bg-white border-b border-slate-100 px-4 py-3 flex items-center justify-between shrink-0">
+        <div className="grid grid-cols-3 gap-6 flex-1">
+          <div>
+            <span className="text-xs text-slate-400 block">Duração</span>
+            <span className="text-[15px] font-medium text-[#0084FF] mt-0.5 block">
+              {formatShortElapsed(elapsedSeconds)}
+            </span>
+          </div>
+          <div>
+            <span className="text-xs text-slate-400 block">Volume</span>
+            <span className="text-[15px] font-medium text-slate-900 mt-0.5 block">
+              {liveStats.volumeKg.toLocaleString('pt-BR')} kg
+            </span>
+          </div>
+          <div>
+            <span className="text-xs text-slate-400 block">Séries</span>
+            <span className="text-[15px] font-medium text-slate-900 mt-0.5 block">
+              {liveStats.completedSets}
+            </span>
+          </div>
+        </div>
+
+        <MiniAnatomyFigures activeMuscles={liveStats.activeMuscles} />
+      </div>
+
+      {/* ================= CORPO ROLÁVEL DOS EXERCÍCIOS ================= */}
+      <div className="flex-1 overflow-y-auto divide-y divide-slate-100 pb-36 max-w-3xl w-full mx-auto">
+        {activeWorkout.exercises.length === 0 ? (
+          <div className="p-10 text-center space-y-4">
+            <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+              <Dumbbell className="w-7 h-7" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-slate-800">
+                Comece seu treino
+              </h3>
+              <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                Adicione um exercício da biblioteca para registrar suas séries, cargas e repetições.
+              </p>
             </div>
           </div>
-
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => adjustRestTimer(-15)}
-              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200"
-            >
-              -15s
-            </button>
-            <button
-              onClick={() => adjustRestTimer(15)}
-              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200"
-            >
-              +15s
-            </button>
-            <button
-              onClick={stopRestTimer}
-              className="px-3 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 text-xs font-bold"
-            >
-              Pular
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Corpo Rolável do Treino */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-4xl w-full mx-auto space-y-5 pb-32">
-        <div className="bg-[#12151F] border border-slate-800 rounded-2xl p-4 space-y-3">
-          <input
-            type="text"
-            value={activeWorkout.title}
-            onChange={(e) =>
-              updateActiveWorkoutMeta(e.target.value, activeWorkout.description)
-            }
-            placeholder="Nome do Treino"
-            className="w-full bg-transparent text-lg sm:text-xl font-extrabold text-white focus:outline-none border-b border-transparent focus:border-slate-700 pb-1"
-          />
-          <input
-            type="text"
-            value={activeWorkout.description}
-            onChange={(e) =>
-              updateActiveWorkoutMeta(activeWorkout.title, e.target.value)
-            }
-            placeholder="Notas da sessão..."
-            className="w-full bg-[#0B0D14] border border-slate-800/80 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-[#1D8FE1]"
-          />
-        </div>
-
-        {activeWorkout.exercises.length === 0 ? (
-          <div className="bg-[#12151F] border border-dashed border-slate-800 rounded-2xl p-10 text-center space-y-3">
-            <Dumbbell className="w-10 h-10 text-slate-600 mx-auto" />
-            <h3 className="text-base font-bold text-white">
-              Nenhum exercício adicionado ainda
-            </h3>
-            <p className="text-xs text-slate-400 max-w-md mx-auto">
-              Clique em &ldquo;+ Adicionar Exercício&rdquo; abaixo para selecionar ou criar um exercício.
-            </p>
-          </div>
         ) : (
-          activeWorkout.exercises.map((workoutEx, exIdx) => {
+          activeWorkout.exercises.map((workoutEx) => {
             const meta = exerciseMap.get(workoutEx.exerciseId);
             const prevSets = getPreviousExerciseSets(
               workoutEx.exerciseId,
               workoutHistory,
               activeWorkout.editingSessionId
             );
-            const supersetStyle = workoutEx.supersetId
-              ? SUPERSET_COLORS[workoutEx.supersetId]
-              : null;
+            const isNoteOpen =
+              !!openNotesIds[workoutEx.id] || Boolean(workoutEx.notes);
 
             let normalSetCounter = 0;
 
             return (
-              <div
-                key={workoutEx.id}
-                className={`bg-[#12151F] border border-slate-800 rounded-2xl p-4 space-y-4 ${
-                  supersetStyle ? supersetStyle.border : ''
-                }`}
-              >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
+              <div key={workoutEx.id} className="py-5 space-y-3.5 bg-white">
+                {/* Linha 1: Avatar Ilustrativo + Nome em Azul + Menu 3 Pontos (⋮) */}
+                <div className="px-4 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <ExerciseIllustrationBadge muscle={meta?.primaryMuscle} />
+                    <div className="min-w-0">
                       <button
+                        type="button"
                         onClick={() => meta && setInspectExercise(meta)}
-                        className="text-base font-extrabold text-[#38BDF8] hover:underline text-left flex items-center gap-1.5"
+                        className="text-[17px] font-bold text-[#0084FF] hover:underline text-left truncate block"
                       >
                         {meta?.title || 'Exercício'}
                       </button>
-                      {supersetStyle && (
-                        <span
-                          className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full border ${supersetStyle.badge}`}
-                        >
-                          {supersetStyle.label}
+                      {workoutEx.supersetId && (
+                        <span className="inline-block mt-0.5 px-2 py-0.5 rounded-md bg-purple-100 text-purple-700 text-[10px] font-bold uppercase">
+                          Superset {workoutEx.supersetId}
                         </span>
                       )}
                     </div>
-                    <p className="text-[11px] text-slate-400">
-                      {meta ? MUSCLE_LABELS[meta.primaryMuscle] : ''} •{' '}
-                      {meta ? EQUIPMENT_LABELS[meta.equipment] : ''}
-                    </p>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <div className="flex items-center bg-[#0B0D14] border border-slate-800 rounded-lg px-2 py-1 text-[11px]">
-                      <Layers className="w-3 h-3 text-purple-400 mr-1" />
-                      <select
-                        value={workoutEx.supersetId ?? ''}
-                        onChange={(e) =>
-                          updateExerciseNotesOrRest(workoutEx.id, {
-                            supersetId: e.target.value
-                              ? Number(e.target.value)
-                              : null,
-                          })
-                        }
-                        className="bg-transparent text-slate-300 focus:outline-none"
-                      >
-                        <option value="">Sem Superset</option>
-                        <option value="1">Superset A (Roxo)</option>
-                        <option value="2">Superset B (Verde)</option>
-                        <option value="3">Superset C (Âmbar)</option>
-                      </select>
-                    </div>
-
-                    <div className="flex items-center bg-[#0B0D14] border border-slate-800 rounded-lg px-2 py-1 text-[11px]">
-                      <Clock className="w-3 h-3 text-[#38BDF8] mr-1" />
-                      <select
-                        value={workoutEx.restTimerSeconds}
-                        onChange={(e) =>
-                          updateExerciseNotesOrRest(workoutEx.id, {
-                            restTimerSeconds: Number(e.target.value),
-                          })
-                        }
-                        className="bg-transparent text-slate-300 focus:outline-none"
-                      >
-                        <option value={0}>Timer Off</option>
-                        <option value={45}>45s</option>
-                        <option value={60}>1m 00s</option>
-                        <option value={90}>1m 30s</option>
-                        <option value={120}>2m 00s</option>
-                        <option value={150}>2m 30s</option>
-                        <option value={180}>3m 00s</option>
-                      </select>
-                    </div>
-
-                    <button
-                      onClick={() =>
-                        setPlateCalcModal({
-                          weightKg: workoutEx.sets[0]?.weightKg || 60,
-                          workoutExerciseId: workoutEx.id,
-                        })
-                      }
-                      title="Calculadora de Anilhas e Séries de Aquecimento"
-                      className="p-1.5 rounded-lg bg-[#0B0D14] border border-slate-800 text-slate-300 hover:text-[#38BDF8]"
-                    >
-                      <Disc className="w-4 h-4" />
-                    </button>
-
-                    <button
-                      onClick={() =>
-                        setShowExercisePicker({
-                          mode: 'replace',
-                          targetWorkoutExerciseId: workoutEx.id,
-                        })
-                      }
-                      title="Substituir Exercício"
-                      className="p-1.5 rounded-lg bg-[#0B0D14] border border-slate-800 text-slate-300 hover:text-amber-400"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                    </button>
-
-                    <button
-                      disabled={exIdx === 0}
-                      onClick={() =>
-                        moveExerciseInActiveWorkout(workoutEx.id, 'up')
-                      }
-                      className="p-1.5 rounded-lg bg-[#0B0D14] border border-slate-800 text-slate-400 hover:text-white disabled:opacity-30"
-                    >
-                      <ArrowUp className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      disabled={exIdx === activeWorkout.exercises.length - 1}
-                      onClick={() =>
-                        moveExerciseInActiveWorkout(workoutEx.id, 'down')
-                      }
-                      className="p-1.5 rounded-lg bg-[#0B0D14] border border-slate-800 text-slate-400 hover:text-white disabled:opacity-30"
-                    >
-                      <ArrowDown className="w-3.5 h-3.5" />
-                    </button>
-
-                    <button
-                      onClick={() =>
-                        removeExerciseFromActiveWorkout(workoutEx.id)
-                      }
-                      title="Remover Exercício"
-                      className="p-1.5 rounded-lg bg-[#0B0D14] border border-slate-800 text-slate-400 hover:text-red-400"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    aria-label="Opções do exercício"
+                    onClick={() => setMenuWorkoutExerciseId(workoutEx.id)}
+                    className="p-2 rounded-full text-slate-700 hover:bg-slate-100 transition shrink-0"
+                  >
+                    <MoreVertical className="w-5 h-5" />
+                  </button>
                 </div>
 
-                <input
-                  type="text"
-                  value={workoutEx.notes}
-                  onChange={(e) =>
-                    updateExerciseNotesOrRest(workoutEx.id, {
-                      notes: e.target.value,
-                    })
-                  }
-                  placeholder="Adicionar nota ao exercício..."
-                  className="w-full px-3 py-1.5 rounded-xl bg-[#0B0D14] border border-slate-800/70 text-xs text-slate-300 placeholder-slate-500 focus:outline-none focus:border-[#1D8FE1]"
-                />
+                {/* Linha 2: Pílulas [⏱ Descanso: 1min 30s] e [📄+ Nota] */}
+                <div className="px-4 flex flex-wrap items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateExerciseNotesOrRest(workoutEx.id, {
+                        restTimerSeconds: cycleRestTime(
+                          workoutEx.restTimerSeconds
+                        ),
+                      })
+                    }
+                    className="px-3.5 py-2 rounded-xl bg-[#F1F5F9] hover:bg-slate-200 text-slate-900 text-[14px] font-medium flex items-center gap-2 transition"
+                  >
+                    <Clock className="w-4 h-4 text-slate-700" />
+                    <span>
+                      Descanso: {formatRestLabel(workoutEx.restTimerSeconds)}
+                    </span>
+                  </button>
 
-                <div className="space-y-1.5">
-                  <div className="grid grid-cols-12 gap-1.5 px-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    <div className="col-span-1 text-center">Série</div>
-                    <div className="col-span-3">Anterior</div>
-                    <div className="col-span-2 text-center">
-                      {meta?.measurementType === 'distance_duration'
-                        ? 'KM'
-                        : 'KG'}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setOpenNotesIds((prev) => ({
+                        ...prev,
+                        [workoutEx.id]: !prev[workoutEx.id],
+                      }))
+                    }
+                    className="px-3.5 py-2 rounded-xl bg-[#F1F5F9] hover:bg-slate-200 text-slate-900 text-[14px] font-medium flex items-center gap-2 transition"
+                  >
+                    <FilePlus2 className="w-4 h-4 text-slate-700" />
+                    <span>Nota</span>
+                  </button>
+                </div>
+
+                {/* Campo de Nota quando ativo */}
+                {isNoteOpen && (
+                  <div className="px-4">
+                    <input
+                      type="text"
+                      value={workoutEx.notes}
+                      onChange={(e) =>
+                        updateExerciseNotesOrRest(workoutEx.id, {
+                          notes: e.target.value,
+                        })
+                      }
+                      placeholder="Adicionar nota ao exercício (ex: ajuste do banco, pegada...)"
+                      className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#0084FF]"
+                    />
+                  </div>
+                )}
+
+                {/* Tabela de Séries (SÉRIE | ANTERIOR | KG | REPS | RPE | ✓) */}
+                <div className="space-y-1 pt-1">
+                  <div className="grid grid-cols-12 gap-1.5 px-4 pb-1 text-[11px] font-medium uppercase tracking-wide text-slate-400 items-center">
+                    <div className="col-span-2 text-left">SÉRIE</div>
+                    <div className="col-span-3 text-left">ANTERIOR</div>
+                    <div className="col-span-2 text-center flex items-center justify-center gap-1">
+                      <Dumbbell className="w-3 h-3" />
+                      <span>
+                        {meta?.measurementType === 'distance_duration'
+                          ? 'KM'
+                          : 'KG'}
+                      </span>
                     </div>
                     <div className="col-span-2 text-center">
                       {meta?.measurementType === 'duration' ||
@@ -701,23 +827,24 @@ export function ActiveWorkoutDrawer() {
                         : 'REPS'}
                     </div>
                     <div className="col-span-2 text-center">RPE</div>
-                    <div className="col-span-2 text-right pr-1">✓</div>
+                    <div className="col-span-1 text-center">✓</div>
                   </div>
 
                   {workoutEx.sets.map((s, setIdx) => {
                     if (s.type === 'normal') normalSetCounter += 1;
                     const prevSet = prevSets[setIdx];
+                    const fallbackPrevWeight = prevSet?.weightKg ?? s.weightKg ?? 0;
+                    const fallbackPrevReps = prevSet?.reps ?? s.reps ?? 0;
 
                     return (
                       <div
                         key={s.id}
-                        className={`grid grid-cols-12 gap-1.5 items-center px-2 py-1.5 rounded-xl transition ${
-                          s.completed
-                            ? 'bg-emerald-500/15 border border-emerald-500/30'
-                            : 'bg-[#0B0D14] border border-slate-800/70'
+                        className={`grid grid-cols-12 gap-1.5 items-center px-4 py-1.5 transition-colors ${
+                          s.completed ? 'bg-[#DCFCE7]' : 'bg-white'
                         }`}
                       >
-                        <div className="col-span-1 flex justify-center">
+                        {/* SÉRIE (1, 2, 3, W, D, F) */}
+                        <div className="col-span-2 flex items-center">
                           <button
                             type="button"
                             onClick={() =>
@@ -725,14 +852,16 @@ export function ActiveWorkoutDrawer() {
                                 type: cycleSetType(s.type),
                               })
                             }
-                            className={`w-6 h-6 rounded-lg font-extrabold text-xs flex items-center justify-center transition ${
-                              s.type === 'warmup'
-                                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                            className={`w-9 h-8 rounded-lg font-bold text-[15px] flex items-center justify-center transition ${
+                              s.completed
+                                ? 'bg-[#BBF7D0] text-slate-900'
+                                : s.type === 'warmup'
+                                ? 'bg-amber-100 text-amber-700'
                                 : s.type === 'dropset'
-                                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                                ? 'bg-purple-100 text-purple-700'
                                 : s.type === 'failure'
-                                ? 'bg-red-500/20 text-red-400 border border-red-500/40'
-                                : 'bg-slate-800 text-white'
+                                ? 'bg-red-100 text-red-600'
+                                : 'bg-[#F1F5F9] text-slate-900'
                             }`}
                           >
                             {s.type === 'warmup'
@@ -745,25 +874,27 @@ export function ActiveWorkoutDrawer() {
                           </button>
                         </div>
 
+                        {/* ANTERIOR */}
                         <div className="col-span-3">
-                          {prevSet ? (
-                            <button
-                              type="button"
-                              onClick={() =>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (prevSet) {
                                 updateActiveSet(workoutEx.id, s.id, {
                                   weightKg: prevSet.weightKg,
                                   reps: prevSet.reps,
-                                })
+                                });
                               }
-                              className="text-xs text-slate-400 hover:text-[#38BDF8] font-medium truncate block"
-                            >
-                              {prevSet.weightKg ?? 0}kg × {prevSet.reps ?? 0}
-                            </button>
-                          ) : (
-                            <span className="text-xs text-slate-600">—</span>
-                          )}
+                            }}
+                            className="text-[14px] text-slate-400 font-normal truncate block text-left"
+                          >
+                            {fallbackPrevWeight > 0 || fallbackPrevReps > 0
+                              ? `${fallbackPrevWeight}kg x ${fallbackPrevReps}`
+                              : '—'}
+                          </button>
                         </div>
 
+                        {/* KG */}
                         <div className="col-span-2">
                           {meta?.measurementType === 'distance_duration' ? (
                             <input
@@ -778,7 +909,11 @@ export function ActiveWorkoutDrawer() {
                                       : Number(e.target.value),
                                 })
                               }
-                              className="w-full text-center py-1 rounded-lg bg-[#141824] border border-slate-700/70 text-xs font-bold text-white focus:outline-none focus:border-[#1D8FE1]"
+                              className={`w-full h-9 text-center rounded-xl text-[15px] font-semibold focus:outline-none ${
+                                s.completed
+                                  ? 'bg-transparent text-slate-900 font-bold'
+                                  : 'bg-white border border-slate-200 text-slate-700 focus:border-[#0084FF]'
+                              }`}
                             />
                           ) : (
                             <input
@@ -793,11 +928,16 @@ export function ActiveWorkoutDrawer() {
                                       : Number(e.target.value),
                                 })
                               }
-                              className="w-full text-center py-1 rounded-lg bg-[#141824] border border-slate-700/70 text-xs font-bold text-white focus:outline-none focus:border-[#1D8FE1]"
+                              className={`w-full h-9 text-center rounded-xl text-[15px] font-semibold focus:outline-none ${
+                                s.completed
+                                  ? 'bg-transparent text-slate-900 font-bold'
+                                  : 'bg-white border border-slate-200 text-slate-700 focus:border-[#0084FF]'
+                              }`}
                             />
                           )}
                         </div>
 
+                        {/* REPS */}
                         <div className="col-span-2">
                           {meta?.measurementType === 'duration' ||
                           meta?.measurementType === 'distance_duration' ? (
@@ -812,7 +952,11 @@ export function ActiveWorkoutDrawer() {
                                       : Number(e.target.value),
                                 })
                               }
-                              className="w-full text-center py-1 rounded-lg bg-[#141824] border border-slate-700/70 text-xs font-bold text-white focus:outline-none focus:border-[#1D8FE1]"
+                              className={`w-full h-9 text-center rounded-xl text-[15px] font-semibold focus:outline-none ${
+                                s.completed
+                                  ? 'bg-transparent text-slate-900 font-bold'
+                                  : 'bg-white border border-slate-200 text-slate-700 focus:border-[#0084FF]'
+                              }`}
                             />
                           ) : (
                             <input
@@ -826,52 +970,58 @@ export function ActiveWorkoutDrawer() {
                                       : Number(e.target.value),
                                 })
                               }
-                              className="w-full text-center py-1 rounded-lg bg-[#141824] border border-slate-700/70 text-xs font-bold text-white focus:outline-none focus:border-[#1D8FE1]"
+                              className={`w-full h-9 text-center rounded-xl text-[15px] font-semibold focus:outline-none ${
+                                s.completed
+                                  ? 'bg-transparent text-slate-900 font-bold'
+                                  : 'bg-white border border-slate-200 text-slate-700 focus:border-[#0084FF]'
+                              }`}
                             />
                           )}
                         </div>
 
-                        <div className="col-span-2">
-                          <select
-                            value={s.rpe ?? ''}
-                            onChange={(e) =>
-                              updateActiveSet(workoutEx.id, s.id, {
-                                rpe:
-                                  e.target.value === ''
-                                    ? null
-                                    : (Number(e.target.value) as RPEValue),
-                              })
-                            }
-                            className="w-full text-center py-1 rounded-lg bg-[#141824] border border-slate-700/70 text-[11px] font-semibold text-slate-300 focus:outline-none"
-                          >
-                            {RPE_OPTIONS.map((rpeOpt) => (
-                              <option key={String(rpeOpt)} value={rpeOpt ?? ''}>
-                                {rpeOpt === null ? '—' : rpeOpt}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div className="col-span-2 flex items-center justify-end gap-1">
-                          <button
-                            type="button"
-                            onClick={() => toggleCompleteSet(workoutEx.id, s.id)}
-                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition ${
-                              s.completed
-                                ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25'
-                                : 'bg-slate-800 text-slate-400 hover:text-white'
-                            }`}
-                          >
-                            <Check className="w-4 h-4" />
-                          </button>
+                        {/* RPE (Botão com ícone de velocímetro idêntico às imagens) */}
+                        <div className="col-span-2 flex justify-center">
                           <button
                             type="button"
                             onClick={() =>
-                              removeSetFromActiveExercise(workoutEx.id, s.id)
+                              setActiveRpePicker({
+                                workoutExerciseId: workoutEx.id,
+                                setId: s.id,
+                                currentRpe: s.rpe ?? null,
+                              })
                             }
-                            className="p-1 text-slate-600 hover:text-red-400"
+                            aria-label="Selecionar RPE"
+                            className={`w-11 h-9 rounded-xl flex items-center justify-center text-xs font-bold transition ${
+                              s.completed
+                                ? 'bg-[#BBF7D0]/80 text-slate-700'
+                                : 'bg-[#F1F5F9] text-slate-400 hover:text-slate-700'
+                            }`}
                           >
-                            <X className="w-3.5 h-3.5" />
+                            {s.rpe ? (
+                              <span className="text-slate-900 font-bold">
+                                {s.rpe}
+                              </span>
+                            ) : (
+                              <Gauge className="w-4 h-4 stroke-[1.8]" />
+                            )}
+                          </button>
+                        </div>
+
+                        {/* Checkbox ✓ */}
+                        <div className="col-span-1 flex justify-end">
+                          <button
+                            type="button"
+                            aria-label="Marcar série como concluída"
+                            onClick={() =>
+                              toggleCompleteSet(workoutEx.id, s.id)
+                            }
+                            className={`w-9 h-9 rounded-xl flex items-center justify-center transition ${
+                              s.completed
+                                ? 'bg-[#22C55E] text-white shadow-sm'
+                                : 'bg-[#F1F5F9] text-slate-400 hover:text-slate-700'
+                            }`}
+                          >
+                            <Check className="w-5 h-5 stroke-[2.5]" />
                           </button>
                         </div>
                       </div>
@@ -879,38 +1029,28 @@ export function ActiveWorkoutDrawer() {
                   })}
                 </div>
 
-                <div className="flex items-center justify-between pt-1">
+                {/* Botão Largo [+ Adicionar série] */}
+                <div className="px-4 pt-1">
                   <button
                     type="button"
                     onClick={() => addSetToActiveExercise(workoutEx.id)}
-                    className="px-3.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-xs font-bold text-slate-200 flex items-center gap-1.5 transition"
+                    className="w-full py-2.5 rounded-xl bg-[#F1F5F9] hover:bg-slate-200 text-slate-900 font-medium text-[15px] flex items-center justify-center gap-2 transition"
                   >
-                    <Plus className="w-3.5 h-3.5" /> Adicionar Série
+                    <Plus className="w-4 h-4 stroke-[2.2]" />
+                    <span>Adicionar série</span>
                   </button>
-
-                  <div className="text-[11px] text-slate-400">
-                    Melhor 1RM na sessão:{' '}
-                    <strong className="text-[#38BDF8]">
-                      {Math.max(
-                        0,
-                        ...workoutEx.sets.map((s) =>
-                          calculate1RM(s.weightKg, s.reps)
-                        )
-                      )}{' '}
-                      kg
-                    </strong>
-                  </div>
                 </div>
               </div>
             );
           })
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+        {/* Ações principais no final da lista */}
+        <div className="p-4 space-y-3 bg-white border-t border-slate-100">
           <button
             type="button"
             onClick={() => setShowExercisePicker({ mode: 'add' })}
-            className="py-3.5 rounded-2xl bg-[#1D8FE1] hover:bg-[#167AC6] text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#1D8FE1]/20 transition"
+            className="w-full py-3.5 rounded-2xl bg-[#0084FF] hover:bg-blue-600 text-white font-bold text-[15px] flex items-center justify-center gap-2 shadow-sm transition"
           >
             <Plus className="w-5 h-5" /> Adicionar Exercício
           </button>
@@ -925,7 +1065,7 @@ export function ActiveWorkoutDrawer() {
                 discardActiveWorkout();
               }
             }}
-            className="py-3.5 rounded-2xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-400 font-bold text-sm flex items-center justify-center gap-2 transition"
+            className="w-full py-3 rounded-2xl bg-red-50 hover:bg-red-100 text-red-600 font-semibold text-sm flex items-center justify-center gap-2 transition"
           >
             <Trash2 className="w-4 h-4" />{' '}
             {isEditingSession ? 'Cancelar Edição' : 'Descartar Treino'}
@@ -933,25 +1073,266 @@ export function ActiveWorkoutDrawer() {
         </div>
       </div>
 
-      {/* Modal Seletor + Criação Rápida de Exercício */}
+      {/* ================= BARRA INFERIOR DO TIMER DE DESCANSO (Idêntica à Imagem 2) ================= */}
+      {restTimer.isActive && !menuWorkoutExerciseId && !showReorderSheet && !activeRpePicker && (
+        <div className="fixed bottom-0 inset-x-0 z-50 bg-white shadow-[0_-8px_24px_rgba(0,0,0,0.08)] pb-[env(safe-area-inset-bottom)]">
+          {/* Linha de progresso azul no topo da barra do timer */}
+          <div className="w-full h-1 bg-slate-200 overflow-hidden">
+            <div
+              className="h-full bg-[#0084FF] transition-all duration-500"
+              style={{
+                width: `${Math.min(
+                  100,
+                  (restTimer.remainingSeconds /
+                    Math.max(1, restTimer.totalSeconds)) *
+                    100
+                )}%`,
+              }}
+            />
+          </div>
+
+          <div className="px-4 py-3 flex items-center justify-between gap-3 max-w-3xl mx-auto">
+            <button
+              type="button"
+              onClick={() => adjustRestTimer(-15)}
+              className="px-5 py-2.5 rounded-xl bg-[#F1F5F9] hover:bg-slate-200 text-slate-900 font-semibold text-[15px] transition"
+            >
+              -15
+            </button>
+
+            <div className="text-3xl font-bold text-slate-900 tracking-tight font-sans">
+              {formatTimerClock(restTimer.remainingSeconds)}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => adjustRestTimer(15)}
+                className="px-5 py-2.5 rounded-xl bg-[#F1F5F9] hover:bg-slate-200 text-slate-900 font-semibold text-[15px] transition"
+              >
+                +15
+              </button>
+              <button
+                type="button"
+                onClick={stopRestTimer}
+                className="px-5 py-2.5 rounded-xl bg-[#0084FF] hover:bg-blue-600 text-white font-semibold text-[15px] transition"
+              >
+                Pular
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= BOTTOM SHEET DO MENU (⋮) (Idêntico à Imagem 1) ================= */}
+      {menuWorkoutExerciseId && (
+        <div
+          onClick={() => setMenuWorkoutExerciseId(null)}
+          className="fixed inset-0 z-[70] bg-black/50 flex flex-col justify-end animate-fadeIn"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#F8FAFC] rounded-t-3xl pt-3 pb-[max(2rem,env(safe-area-inset-bottom))] px-4 space-y-4 shadow-2xl"
+          >
+            {/* Alça superior do Bottom Sheet */}
+            <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto" />
+
+            <div className="bg-white rounded-2xl divide-y divide-slate-100 overflow-hidden shadow-sm border border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuWorkoutExerciseId(null);
+                  setShowReorderSheet(true);
+                }}
+                className="w-full px-5 py-4 text-left flex items-center gap-4 hover:bg-slate-50 transition"
+              >
+                <ArrowUpDown className="w-5 h-5 text-slate-800" />
+                <span className="text-[16px] font-medium text-slate-900">
+                  Reordenar exercícios
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const targetId = menuWorkoutExerciseId;
+                  setMenuWorkoutExerciseId(null);
+                  setShowExercisePicker({
+                    mode: 'replace',
+                    targetWorkoutExerciseId: targetId,
+                  });
+                }}
+                className="w-full px-5 py-4 text-left flex items-center gap-4 hover:bg-slate-50 transition"
+              >
+                <RefreshCw className="w-5 h-5 text-slate-800" />
+                <span className="text-[16px] font-medium text-slate-900">
+                  Substituir exercício
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const targetEx = activeWorkout.exercises.find(
+                    (e) => e.id === menuWorkoutExerciseId
+                  );
+                  if (targetEx) {
+                    const nextSuperset = targetEx.supersetId ? null : 1;
+                    updateExerciseNotesOrRest(targetEx.id, {
+                      supersetId: nextSuperset,
+                    });
+                  }
+                  setMenuWorkoutExerciseId(null);
+                }}
+                className="w-full px-5 py-4 text-left flex items-center gap-4 hover:bg-slate-50 transition"
+              >
+                <Plus className="w-5 h-5 text-slate-800" />
+                <span className="text-[16px] font-medium text-slate-900">
+                  Adicionar ao superset
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  removeExerciseFromActiveWorkout(menuWorkoutExerciseId);
+                  setMenuWorkoutExerciseId(null);
+                }}
+                className="w-full px-5 py-4 text-left flex items-center gap-4 hover:bg-red-50 transition"
+              >
+                <X className="w-5 h-5 text-red-500" />
+                <span className="text-[16px] font-medium text-red-500">
+                  Remover exercício
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL DE REORDENAÇÃO DE EXERCÍCIOS ================= */}
+      {showReorderSheet && (
+        <div
+          onClick={() => setShowReorderSheet(false)}
+          className="fixed inset-0 z-[70] bg-black/50 flex flex-col justify-end"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-t-3xl p-5 space-y-4 max-h-[75vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-slate-900">
+                Reordenar Exercícios
+              </h3>
+              <button
+                onClick={() => setShowReorderSheet(false)}
+                className="text-sm font-bold text-[#0084FF]"
+              >
+                Concluído
+              </button>
+            </div>
+            <div className="space-y-2">
+              {activeWorkout.exercises.map((ex, idx) => {
+                const meta = exerciseMap.get(ex.exerciseId);
+                return (
+                  <div
+                    key={ex.id}
+                    className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200"
+                  >
+                    <span className="text-sm font-semibold text-slate-800">
+                      {idx + 1}. {meta?.title || 'Exercício'}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        disabled={idx === 0}
+                        onClick={() => moveExerciseInActiveWorkout(ex.id, 'up')}
+                        className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-xs font-bold disabled:opacity-30"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        disabled={idx === activeWorkout.exercises.length - 1}
+                        onClick={() =>
+                          moveExerciseInActiveWorkout(ex.id, 'down')
+                        }
+                        className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-xs font-bold disabled:opacity-30"
+                      >
+                        ↓
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= SELETOR DE RPE BOTTOM SHEET ================= */}
+      {activeRpePicker && (
+        <div
+          onClick={() => setActiveRpePicker(null)}
+          className="fixed inset-0 z-[70] bg-black/50 flex flex-col justify-end"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-t-3xl p-5 space-y-4"
+          >
+            <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto" />
+            <div className="text-center">
+              <h3 className="text-base font-bold text-slate-900">
+                RPE (Esforço Percebido da Série)
+              </h3>
+              <p className="text-xs text-slate-500">
+                10 = Falha máxima • 9 = 1 repetição na reserva • 8 = 2 repetições na reserva
+              </p>
+            </div>
+            <div className="grid grid-cols-5 gap-2">
+              {RPE_OPTIONS.map((val) => (
+                <button
+                  key={String(val)}
+                  type="button"
+                  onClick={() => {
+                    updateActiveSet(
+                      activeRpePicker.workoutExerciseId,
+                      activeRpePicker.setId,
+                      { rpe: val }
+                    );
+                    setActiveRpePicker(null);
+                  }}
+                  className={`py-3 rounded-xl font-bold text-sm border transition ${
+                    activeRpePicker.currentRpe === val
+                      ? 'bg-[#0084FF] text-white border-[#0084FF]'
+                      : 'bg-slate-50 text-slate-800 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  {val === null ? 'Limpar' : val}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL SELETOR DE EXERCÍCIO ================= */}
       {showExercisePicker && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[#12151F] border border-slate-800 rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
-              <h3 className="text-base font-bold text-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900">
                 {showExercisePicker.mode === 'replace'
                   ? 'Substituir Exercício'
-                  : 'Adicionar Exercício ao Treino'}
+                  : 'Adicionar Exercício'}
               </h3>
               <button
                 onClick={() => setShowExercisePicker(null)}
-                className="p-1 text-slate-400 hover:text-white"
+                className="p-1 text-slate-400 hover:text-slate-700"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-4 border-b border-slate-800 space-y-3">
+            <div className="p-4 border-b border-slate-100 space-y-3">
               <div className="relative">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
@@ -959,15 +1340,14 @@ export function ActiveWorkoutDrawer() {
                   autoFocus
                   value={pickerSearch}
                   onChange={(e) => setPickerSearch(e.target.value)}
-                  placeholder="Digite o nome do exercício para buscar ou criar..."
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#0B0D14] border border-slate-800 text-sm text-white focus:outline-none focus:border-[#1D8FE1]"
+                  placeholder="Buscar exercício..."
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-100 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0084FF]"
                 />
               </div>
 
-              {/* Criação Rápida Inline caso queira cadastrar na hora */}
               {pickerSearch.trim().length > 0 && (
-                <div className="bg-[#0B0D14] border border-slate-800 rounded-xl p-3 space-y-2">
-                  <p className="text-[11px] font-bold text-slate-400 uppercase">
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+                  <p className="text-[11px] font-bold text-slate-500 uppercase">
                     Criar &ldquo;{pickerSearch.trim()}&rdquo; como novo exercício:
                   </p>
                   <div className="grid grid-cols-2 gap-2">
@@ -976,7 +1356,7 @@ export function ActiveWorkoutDrawer() {
                       onChange={(e) =>
                         setQuickExMuscle(e.target.value as MuscleGroup)
                       }
-                      className="px-2.5 py-1.5 rounded-lg bg-[#141824] border border-slate-800 text-xs text-white"
+                      className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-800"
                     >
                       {MUSCLE_OPTIONS.map((m) => (
                         <option key={m} value={m}>
@@ -989,7 +1369,7 @@ export function ActiveWorkoutDrawer() {
                       onChange={(e) =>
                         setQuickExEquip(e.target.value as EquipmentType)
                       }
-                      className="px-2.5 py-1.5 rounded-lg bg-[#141824] border border-slate-800 text-xs text-white"
+                      className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-800"
                     >
                       {EQUIPMENT_OPTIONS.map((eq) => (
                         <option key={eq} value={eq}>
@@ -1023,239 +1403,73 @@ export function ActiveWorkoutDrawer() {
                       setShowExercisePicker(null);
                       setPickerSearch('');
                     }}
-                    className="w-full py-2 rounded-lg bg-[#1D8FE1] hover:bg-[#167AC6] text-white text-xs font-bold flex items-center justify-center gap-1.5"
+                    className="w-full py-2 rounded-lg bg-[#0084FF] text-white text-xs font-bold flex items-center justify-center gap-1.5"
                   >
-                    <Plus className="w-4 h-4" /> Criar e Adicionar ao Treino
+                    <Plus className="w-4 h-4" /> Criar e Adicionar
                   </button>
                 </div>
               )}
             </div>
 
-            <div className="flex-1 overflow-y-auto p-3 space-y-2">
-              {exercises.length === 0 ? (
-                <p className="text-xs text-slate-400 text-center py-6">
-                  Digite o nome do exercício no campo acima para criá-lo e adicioná-lo ao treino.
-                </p>
-              ) : (
-                exercises
-                  .filter(
-                    (e) =>
-                      e.title
-                        .toLowerCase()
-                        .includes(pickerSearch.toLowerCase()) ||
-                      MUSCLE_LABELS[e.primaryMuscle]
-                        .toLowerCase()
-                        .includes(pickerSearch.toLowerCase())
-                  )
-                  .map((ex) => (
-                    <button
-                      key={ex.id}
-                      onClick={() => {
-                        if (
-                          showExercisePicker.mode === 'replace' &&
-                          showExercisePicker.targetWorkoutExerciseId
-                        ) {
-                          replaceExerciseInActiveWorkout(
-                            showExercisePicker.targetWorkoutExerciseId,
-                            ex.id
-                          );
-                        } else {
-                          addExerciseToActiveWorkout(ex.id);
-                        }
-                        setShowExercisePicker(null);
-                        setPickerSearch('');
-                      }}
-                      className="w-full text-left p-3 rounded-xl bg-[#171B26] hover:bg-[#1D8FE1]/20 border border-slate-800 hover:border-[#1D8FE1]/50 flex items-center justify-between transition"
-                    >
+            <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+              {exercises
+                .filter(
+                  (e) =>
+                    e.title
+                      .toLowerCase()
+                      .includes(pickerSearch.toLowerCase()) ||
+                    MUSCLE_LABELS[e.primaryMuscle]
+                      .toLowerCase()
+                      .includes(pickerSearch.toLowerCase())
+                )
+                .map((ex) => (
+                  <button
+                    key={ex.id}
+                    onClick={() => {
+                      if (
+                        showExercisePicker.mode === 'replace' &&
+                        showExercisePicker.targetWorkoutExerciseId
+                      ) {
+                        replaceExerciseInActiveWorkout(
+                          showExercisePicker.targetWorkoutExerciseId,
+                          ex.id
+                        );
+                      } else {
+                        addExerciseToActiveWorkout(ex.id);
+                      }
+                      setShowExercisePicker(null);
+                      setPickerSearch('');
+                    }}
+                    className="w-full text-left p-3 rounded-2xl hover:bg-slate-100 flex items-center justify-between transition"
+                  >
+                    <div className="flex items-center gap-3">
+                      <ExerciseIllustrationBadge muscle={ex.primaryMuscle} />
                       <div>
-                        <p className="text-sm font-bold text-white">
+                        <p className="text-sm font-bold text-slate-900">
                           {ex.title}
                         </p>
-                        <p className="text-xs text-slate-400">
+                        <p className="text-xs text-slate-500">
                           {MUSCLE_LABELS[ex.primaryMuscle]} •{' '}
                           {EQUIPMENT_LABELS[ex.equipment]}
                         </p>
                       </div>
-                      <Plus className="w-4 h-4 text-[#38BDF8]" />
-                    </button>
-                  ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Calculadora de Anilhas & Séries de Aquecimento */}
-      {plateCalcModal && plateBreakdown && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[#12151F] border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Calculator className="w-4 h-4 text-[#1D8FE1]" />
-                Calculadora de Anilhas & Warm-up
-              </h3>
-              <button
-                onClick={() => setPlateCalcModal(null)}
-                className="p-1 text-slate-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-5 max-h-[80vh] overflow-y-auto">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1">
-                    Carga Total Alvo (kg)
-                  </label>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() =>
-                        setPlateCalcModal({
-                          ...plateCalcModal,
-                          weightKg: Math.max(
-                            barWeightKg,
-                            plateCalcModal.weightKg - 2.5
-                          ),
-                        })
-                      }
-                      className="p-2 rounded-lg bg-slate-800 text-white"
-                    >
-                      <Minus className="w-3.5 h-3.5" />
-                    </button>
-                    <input
-                      type="number"
-                      step="2.5"
-                      value={plateCalcModal.weightKg}
-                      onChange={(e) =>
-                        setPlateCalcModal({
-                          ...plateCalcModal,
-                          weightKg: Number(e.target.value) || 0,
-                        })
-                      }
-                      className="w-full text-center py-1.5 rounded-lg bg-[#0B0D14] border border-slate-800 text-sm font-extrabold text-white"
-                    />
-                    <button
-                      onClick={() =>
-                        setPlateCalcModal({
-                          ...plateCalcModal,
-                          weightKg: plateCalcModal.weightKg + 2.5,
-                        })
-                      }
-                      className="p-2 rounded-lg bg-slate-800 text-white"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1">
-                    Peso da Barra
-                  </label>
-                  <select
-                    value={barWeightKg}
-                    onChange={(e) => setBarWeightKg(Number(e.target.value))}
-                    className="w-full py-2 px-3 rounded-lg bg-[#0B0D14] border border-slate-800 text-xs font-bold text-white"
-                  >
-                    <option value={20}>20 kg (Olímpica Padrão)</option>
-                    <option value={15}>15 kg (Olímpica Feminina)</option>
-                    <option value={12}>12 kg (Barra Média)</option>
-                    <option value={10}>10 kg (Barra W / Curta)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="bg-[#0B0D14] border border-slate-800 rounded-xl p-4 space-y-3">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400 font-semibold">
-                    Anilhas por Lado da Barra:
-                  </span>
-                  <span className="text-[#38BDF8] font-bold">
-                    {plateBreakdown.achievedWeight} kg total
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-center py-4 gap-1 min-h-[100px]">
-                  <div className="w-12 h-3 bg-slate-500 rounded-l-md" />
-                  <div className="w-2 h-8 bg-slate-400 rounded-sm" />
-                  {plateBreakdown.platesPerSide.length === 0 ? (
-                    <span className="text-xs text-slate-500 ml-3">
-                      Apenas a barra ({barWeightKg}kg)
-                    </span>
-                  ) : (
-                    plateBreakdown.platesPerSide.flatMap((p) =>
-                      Array.from({ length: p.count }).map((_, idx) => {
-                        const heightPx =
-                          p.weight >= 20
-                            ? 'h-20'
-                            : p.weight >= 15
-                            ? 'h-16'
-                            : p.weight >= 10
-                            ? 'h-14'
-                            : p.weight >= 5
-                            ? 'h-11'
-                            : 'h-9';
-                        return (
-                          <div
-                            key={`${p.weight}-${idx}`}
-                            style={{ backgroundColor: p.color }}
-                            className={`w-5 ${heightPx} rounded-sm flex items-center justify-center text-[9px] font-extrabold text-slate-950 shadow`}
-                          >
-                            {p.weight}
-                          </div>
-                        );
-                      })
-                    )
-                  )}
-                  <div className="w-8 h-3 bg-slate-500 rounded-r-md" />
-                </div>
-
-                {plateBreakdown.platesPerSide.length > 0 && (
-                  <div className="flex flex-wrap gap-2 justify-center">
-                    {plateBreakdown.platesPerSide.map((p) => (
-                      <span
-                        key={p.weight}
-                        className="px-2.5 py-1 rounded-lg bg-[#151925] border border-slate-800 text-xs font-bold text-white"
-                      >
-                        {p.count}× {p.weight}kg
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="bg-[#0B0D14] border border-slate-800 rounded-xl p-4 space-y-2.5">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-                  <Flame className="w-3.5 h-3.5" /> Sugestão de Aquecimento
-                </h4>
-                <div className="space-y-1.5">
-                  {warmupSuggestions.map((w, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center justify-between text-xs bg-[#141824] px-3 py-1.5 rounded-lg"
-                    >
-                      <span className="text-slate-300">{w.label}</span>
-                      <span className="font-bold text-amber-300">
-                        {w.weightKg}kg × {w.reps} reps
-                      </span>
                     </div>
-                  ))}
-                </div>
-              </div>
+                    <Plus className="w-5 h-5 text-[#0084FF]" />
+                  </button>
+                ))}
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal de Confirmação ao Finalizar Treino */}
+      {/* ================= MODAL DE CONFIRMAÇÃO AO CONCLUIR ================= */}
       {showFinishModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[#12151F] border border-slate-800 rounded-2xl w-full max-w-md p-6 space-y-5 shadow-2xl">
-            <h3 className="text-lg font-extrabold text-white">
-              Finalizar Treino?
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md p-6 space-y-5 shadow-2xl">
+            <h3 className="text-lg font-extrabold text-slate-900">
+              Concluir Treino?
             </h3>
-            <p className="text-xs text-slate-300 leading-relaxed">
+            <p className="text-xs text-slate-600 leading-relaxed">
               Você completou <strong>{liveStats.completedSets} séries</strong>{' '}
               com um volume total de{' '}
               <strong>{liveStats.volumeKg.toLocaleString('pt-BR')} kg</strong>.
@@ -1268,18 +1482,18 @@ export function ActiveWorkoutDrawer() {
                     setShowFinishModal(false);
                     finishActiveWorkout(true);
                   }}
-                  className="w-full py-3 rounded-xl bg-[#1D8FE1] hover:bg-[#167AC6] text-white font-bold text-xs sm:text-sm transition"
+                  className="w-full py-3 rounded-xl bg-[#0084FF] hover:bg-blue-600 text-white font-bold text-xs sm:text-sm transition"
                 >
-                  Finalizar e Atualizar Rotina Original
+                  Concluir e Atualizar Rotina
                 </button>
                 <button
                   onClick={() => {
                     setShowFinishModal(false);
                     finishActiveWorkout(false);
                   }}
-                  className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs sm:text-sm transition"
+                  className="w-full py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs sm:text-sm transition"
                 >
-                  Finalizar (Manter Rotina Original Intacta)
+                  Concluir (Manter Rotina Original)
                 </button>
               </div>
             ) : (
@@ -1288,7 +1502,7 @@ export function ActiveWorkoutDrawer() {
                   setShowFinishModal(false);
                   finishActiveWorkout(false);
                 }}
-                className="w-full py-3 rounded-xl bg-[#1D8FE1] hover:bg-[#167AC6] text-white font-bold text-sm transition"
+                className="w-full py-3 rounded-xl bg-[#0084FF] hover:bg-blue-600 text-white font-bold text-sm transition"
               >
                 Confirmar e Salvar Treino
               </button>
@@ -1296,7 +1510,7 @@ export function ActiveWorkoutDrawer() {
 
             <button
               onClick={() => setShowFinishModal(false)}
-              className="w-full py-2 text-xs font-semibold text-slate-400 hover:text-white"
+              className="w-full py-2 text-xs font-semibold text-slate-400 hover:text-slate-700"
             >
               Voltar ao Treino
             </button>

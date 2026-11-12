@@ -7,7 +7,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: 'cover',
-  themeColor: '#090A0F',
+  themeColor: '#FFFFFF',
 };
 
 export const metadata: Metadata = {
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
-    statusBarStyle: 'black-translucent',
+    statusBarStyle: 'default',
     title: 'IronPulse',
   },
   formatDetection: {
@@ -31,8 +31,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR" className="dark">
-      <body className="min-h-screen bg-[#090A0F] text-slate-100 antialiased selection:bg-[#1D8FE1]/30">
+    <html lang="pt-BR">
+      <body className="min-h-screen bg-[#F8FAFC] text-slate-900 antialiased selection:bg-[#0084FF]/20">
         {children}
       </body>
     </html>

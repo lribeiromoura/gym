@@ -23,18 +23,18 @@ export function BodyHeatmapSVG({
 
   const getMuscleColor = (muscle: MuscleGroup): string => {
     if (highlightPrimary) {
-      if (muscle === highlightPrimary) return '#1D8FE1';
-      if (highlightSecondary.includes(muscle)) return '#38BDF8';
-      return '#1E2433';
+      if (muscle === highlightPrimary) return '#0084FF';
+      if (highlightSecondary.includes(muscle)) return '#60A5FA';
+      return '#CBD5E1';
     }
 
-    if (!muscleScores || !muscleScores[muscle]) return '#1E2433';
+    if (!muscleScores || !muscleScores[muscle]) return '#CBD5E1';
     const score = muscleScores[muscle].score;
-    if (score <= 0) return '#1E2433';
-    if (score < 3) return '#1E3A8A';
-    if (score < 6) return '#1D8FE1';
-    if (score < 10) return '#38BDF8';
-    return '#F59E0B';
+    if (score <= 0) return '#CBD5E1';
+    if (score < 3) return '#93C5FD';
+    if (score < 6) return '#3B82F6';
+    if (score < 10) return '#0084FF';
+    return '#1D4ED8';
   };
 
   const handleSelect = (muscle: MuscleGroup) => {
@@ -55,7 +55,7 @@ export function BodyHeatmapSVG({
         {/* ================= VISTA FRONTAL ================= */}
         <div className="flex flex-col items-center w-full">
           {!compact && (
-            <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-2">
+            <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold mb-2">
               Frente
             </span>
           )}
@@ -63,8 +63,8 @@ export function BodyHeatmapSVG({
             viewBox="0 0 200 420"
             className={`w-full ${compact ? 'h-44' : 'h-64 sm:h-72'} select-none`}
           >
-            <circle cx="100" cy="30" r="20" fill="#283044" />
-            <rect x="92" y="48" width="16" height="14" rx="4" fill="#283044" />
+            <circle cx="100" cy="30" r="20" fill="#94A3B8" />
+            <rect x="92" y="48" width="16" height="14" rx="4" fill="#94A3B8" />
 
             <path
               d="M72 62 L92 52 L108 52 L128 62 L118 68 L82 68 Z"
@@ -203,7 +203,7 @@ export function BodyHeatmapSVG({
         {/* ================= VISTA POSTERIOR ================= */}
         <div className="flex flex-col items-center w-full">
           {!compact && (
-            <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-2">
+            <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold mb-2">
               Costas
             </span>
           )}
@@ -211,7 +211,7 @@ export function BodyHeatmapSVG({
             viewBox="0 0 200 420"
             className={`w-full ${compact ? 'h-44' : 'h-64 sm:h-72'} select-none`}
           >
-            <circle cx="100" cy="30" r="20" fill="#283044" />
+            <circle cx="100" cy="30" r="20" fill="#94A3B8" />
 
             <path
               d="M72 56 L100 48 L128 56 L112 96 L88 96 Z"
@@ -348,41 +348,40 @@ export function BodyHeatmapSVG({
 
       {!compact && !highlightPrimary && (
         <div className="w-full mt-3 space-y-2">
-          <div className="flex flex-wrap items-center justify-center gap-3 text-[11px] text-slate-400">
+          <div className="flex flex-wrap items-center justify-center gap-3 text-[11px] text-slate-500">
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm bg-[#1E2433] border border-slate-700" />{' '}
-              0 séries
+              <span className="w-2.5 h-2.5 rounded-sm bg-[#CBD5E1]" /> 0 séries
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm bg-[#1E3A8A]" /> 1–3 séries
+              <span className="w-2.5 h-2.5 rounded-sm bg-[#93C5FD]" /> 1–3 séries
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm bg-[#1D8FE1]" /> 4–6 séries
+              <span className="w-2.5 h-2.5 rounded-sm bg-[#3B82F6]" /> 4–6 séries
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm bg-[#38BDF8]" /> 7–10 séries
+              <span className="w-2.5 h-2.5 rounded-sm bg-[#0084FF]" /> 7–10 séries
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm bg-[#F59E0B]" /> 10+ (Alta Carga)
+              <span className="w-2.5 h-2.5 rounded-sm bg-[#1D4ED8]" /> 10+ (Alta Carga)
             </span>
           </div>
 
           {selectedMuscle && activeInfo && (
-            <div className="bg-[#161923] border border-slate-800 rounded-xl p-3 flex items-center justify-between text-xs animate-fadeIn">
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between text-xs animate-fadeIn">
               <div>
-                <p className="font-semibold text-white">
+                <p className="font-semibold text-slate-900">
                   {MUSCLE_LABELS[selectedMuscle]}
                 </p>
-                <p className="text-slate-400">
+                <p className="text-slate-500">
                   {activeInfo.primarySets} séries diretas •{' '}
                   {activeInfo.secondarySets} séries sinergistas
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-[#38BDF8] font-bold">
+                <p className="text-[#0084FF] font-bold">
                   {activeInfo.score.toFixed(1)} pts
                 </p>
-                <p className="text-slate-400">
+                <p className="text-slate-500">
                   {Math.round(activeInfo.volumeKg).toLocaleString('pt-BR')} kg
                 </p>
               </div>
