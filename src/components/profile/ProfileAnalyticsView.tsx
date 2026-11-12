@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
+  AlertTriangle,
   BarChart3,
   Bell,
   Camera,
@@ -15,11 +16,23 @@ import {
   Ruler,
   Scale,
   Settings,
+  ShieldCheck,
   Trash2,
+  Undo2,
+  Upload,
   X,
 } from 'lucide-react';
 import { MUSCLE_LABELS, MuscleGroup } from '@/types/workout';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
+import { INITIAL_EXERCISES } from '@/data/initial-data';
+import {
+  BackupFile,
+  createBackup,
+  parseBackup,
+  RestoreMode,
+  shareOrDownloadBackup,
+} from '@/lib/backup';
+import { RestoreBackupModal } from '@/components/profile/RestoreBackupModal';
 import {
   calculateMuscleDistribution,
   exportWorkoutsToCSV,
@@ -44,6 +57,108 @@ export function ProfileAnalyticsView() {
   const deleteProgressPhoto = useWorkoutStore((s) => s.deleteProgressPhoto);
   const updateSettings = useWorkoutStore((s) => s.updateSettings);
   const clearAllData = useWorkoutStore((s) => s.clearAllData);
+  const routines = useWorkoutStore((s) => s.routines);
+  const folders = useWorkoutStore((s) => s.folders);
+  const lastBackupAt = useWorkoutStore((s) => s.lastBackupAt);
+  const markBackupDone = useWorkoutStore((s) => s.markBackupDone);
+  const restoreBackup = useWorkoutStore((s) => s.restoreBackup);
+  const undoLastRestore = useWorkoutStore((s) => s.undoLastRestore);
+
+  const [includePhotosInBackup, setIncludePhotosInBackup] = useState(true);
+  const [pendingRestore, setPendingRestore] = useState<BackupFile | null>(null);
+  const [backupMessage, setBackupMessage] = useState<{
+    type: 'success' | 'error';
+    text: string;
+    canUndo?: boolean;
+  } | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const restoreInputRef = useRef<HTMLInputElement>(null);
+
+  const daysSinceBackup = lastBackupAt
+    ? Math.floor((Date.now() - new Date(lastBackupAt).getTime()) / 86_400_000)
+    : null;
+  const backupOverdue = daysSinceBackup === null || daysSinceBackup > 7;
+  const lastBackupLabel =
+    daysSinceBackup === null
+      ? 'Nenhum backup realizado ainda'
+      : daysSinceBackup === 0
+        ? 'Último backup: hoje'
+        : daysSinceBackup === 1
+          ? 'Último backup: ontem'
+          : `Último backup: há ${daysSinceBackup} dias`;
+
+  const handleExportBackup = async () => {
+    setIsExporting(true);
+    try {
+      const file = createBackup(
+        {
+          exercises,
+          folders,
+          routines,
+          workoutHistory,
+          measurements,
+          progressPhotos,
+          settings,
+        },
+        {
+          includePhotos: includePhotosInBackup,
+          seedIds: new Set(INITIAL_EXERCISES.map((e) => e.id)),
+        }
+      );
+      const result = await shareOrDownloadBackup(file);
+      if (result !== 'cancelled') {
+        markBackupDone();
+        setBackupMessage({ type: 'success', text: 'Backup exportado com sucesso!' });
+      }
+    } catch {
+      setBackupMessage({ type: 'error', text: 'Não foi possível exportar o backup.' });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleRestoreFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target;
+    const selected = input.files?.[0];
+    input.value = '';
+    if (!selected) return;
+    const parsed = parseBackup(await selected.text());
+    if (!parsed.ok) {
+      setBackupMessage({ type: 'error', text: parsed.error });
+      return;
+    }
+    setPendingRestore(parsed.file);
+  };
+
+  const handleConfirmRestore = (mode: RestoreMode) => {
+    if (!pendingRestore) return;
+    try {
+      restoreBackup(pendingRestore.data, mode);
+      setBackupMessage({
+        type: 'success',
+        text: mode === 'replace' ? 'Backup restaurado com sucesso!' : 'Backup mesclado com sucesso!',
+        canUndo: true,
+      });
+    } catch (err) {
+      const quota = (err as Error)?.name === 'QuotaExceededError';
+      setBackupMessage({
+        type: 'error',
+        text: quota
+          ? 'Sem espaço no armazenamento do navegador. Tente um backup sem fotos.'
+          : 'Não foi possível restaurar o backup. Nenhum dado foi alterado.',
+      });
+    } finally {
+      setPendingRestore(null);
+    }
+  };
+
+  const handleUndoRestore = () => {
+    if (undoLastRestore()) {
+      setBackupMessage({ type: 'success', text: 'Restauração desfeita.' });
+    } else {
+      setBackupMessage({ type: 'error', text: 'Não há restauração para desfazer.' });
+    }
+  };
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(settings.name);
@@ -353,7 +468,7 @@ export function ProfileAnalyticsView() {
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Settings className="w-4 h-4" /> CSV & Configurações
+          <Settings className="w-4 h-4" /> Backup & Dados
         </button>
       </div>
 
@@ -850,6 +965,106 @@ export function ProfileAnalyticsView() {
       {/* ================= ABA 4: EXPORTAÇÃO CSV & CONFIGURAÇÕES ================= */}
       {subTab === 'data' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="md:col-span-2 bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-xs">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-[#0084FF]" />
+                  Backup & Restauração
+                </h3>
+                <p className="text-xs text-slate-500 leading-relaxed mt-1">
+                  Seus dados ficam salvos apenas neste aparelho. Exporte um backup em{' '}
+                  <code>.json</code> (rotinas, histórico, medidas, fotos e configurações) e
+                  restaure quando trocar de celular ou limpar o navegador.
+                </p>
+              </div>
+            </div>
+
+            <div
+              className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
+                backupOverdue
+                  ? 'bg-amber-50 border-amber-200 text-amber-800'
+                  : 'bg-slate-50 border-slate-200 text-slate-600'
+              }`}
+            >
+              {backupOverdue ? (
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+              )}
+              <span>
+                {lastBackupLabel}
+                {backupOverdue && ' — recomendamos fazer um backup agora.'}
+              </span>
+            </div>
+
+            <label className="flex items-center gap-3 text-sm text-slate-700 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                className="w-5 h-5 accent-[#0084FF]"
+                checked={includePhotosInBackup}
+                onChange={(e) => setIncludePhotosInBackup(e.target.checked)}
+              />
+              Incluir fotos de progresso
+              <span className="text-xs text-slate-400">({progressPhotos.length})</span>
+            </label>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                onClick={handleExportBackup}
+                disabled={isExporting}
+                className="h-12 rounded-xl bg-[#0084FF] hover:bg-blue-600 disabled:opacity-60 text-white text-sm font-bold flex items-center justify-center gap-2"
+              >
+                <Download className="w-5 h-5" /> Exportar Backup
+              </button>
+              <button
+                onClick={() => restoreInputRef.current?.click()}
+                className="h-12 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-sm font-bold flex items-center justify-center gap-2"
+              >
+                <Upload className="w-5 h-5" /> Restaurar Backup
+              </button>
+              <input
+                ref={restoreInputRef}
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={handleRestoreFile}
+              />
+            </div>
+
+            {backupMessage && (
+              <div
+                className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
+                  backupMessage.type === 'success'
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                    : 'bg-red-50 border-red-200 text-red-700'
+                }`}
+              >
+                {backupMessage.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                )}
+                <span className="flex-1">{backupMessage.text}</span>
+                {backupMessage.canUndo && (
+                  <button
+                    onClick={handleUndoRestore}
+                    className="h-9 px-3 rounded-lg bg-white border border-emerald-300 text-emerald-700 font-bold flex items-center gap-1"
+                  >
+                    <Undo2 className="w-4 h-4" /> Desfazer
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {pendingRestore && (
+            <RestoreBackupModal
+              file={pendingRestore}
+              onCancel={() => setPendingRestore(null)}
+              onConfirm={handleConfirmRestore}
+            />
+          )}
           <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-xs">
             <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
               <Download className="w-4 h-4 text-[#0084FF]" />

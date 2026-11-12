@@ -30,6 +30,9 @@ import {
   scheduleRestNotification,
 } from '@/lib/notifications';
 import { SharePayload } from '@/lib/share';
+import { BackupData, mergeById, RestoreMode } from '@/lib/backup';
+
+const RESTORE_UNDO_KEY = 'ironpulse-restore-undo';
 
 interface RestTimerState {
   isActive: boolean;
@@ -132,6 +135,13 @@ interface WorkoutStoreState {
   // Actions — Settings
   updateSettings: (updates: Partial<UserSettings>) => void;
   clearAllData: () => void;
+
+  // Backup & Restauração
+  lastBackupAt: string | null;
+  markBackupDone: () => void;
+  restoreBackup: (data: BackupData, mode: RestoreMode) => void;
+  undoLastRestore: () => boolean;
+  hasRestoreUndo: () => boolean;
 }
 
 const uid = (prefix = 'id') =>
@@ -154,6 +164,7 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
       measurements: INITIAL_MEASUREMENTS,
       progressPhotos: [],
       settings: INITIAL_USER_SETTINGS,
+      lastBackupAt: null,
 
       startEmptyWorkout: (title = 'Treino Livre') => {
         set({
@@ -977,6 +988,76 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
           settings: INITIAL_USER_SETTINGS,
         });
       },
+
+      markBackupDone: () => {
+        set({ lastBackupAt: new Date().toISOString() });
+      },
+
+      restoreBackup: (data, mode) => {
+        const s = get();
+        const snapshot = {
+          exercises: s.exercises,
+          folders: s.folders,
+          routines: s.routines,
+          workoutHistory: s.workoutHistory,
+          measurements: s.measurements,
+          progressPhotos: s.progressPhotos,
+          settings: s.settings,
+        };
+        // Lança QuotaExceededError se não couber — nada é alterado nesse caso.
+        localStorage.setItem(RESTORE_UNDO_KEY, JSON.stringify(snapshot));
+
+        try {
+          if (mode === 'replace') {
+            const seedIds = new Set(INITIAL_EXERCISES.map((e) => e.id));
+            set({
+              exercises: [
+                ...INITIAL_EXERCISES,
+                ...data.exercises.filter((e) => !seedIds.has(e.id)),
+              ],
+              folders: data.folders,
+              routines: data.routines,
+              workoutHistory: data.workoutHistory,
+              measurements: data.measurements,
+              progressPhotos: data.progressPhotos,
+              settings: { ...INITIAL_USER_SETTINGS, ...data.settings },
+              activeWorkout: null,
+              lastFinishedWorkout: null,
+            });
+          } else {
+            set({
+              exercises: mergeById(s.exercises, data.exercises),
+              folders: mergeById(s.folders, data.folders),
+              routines: mergeById(s.routines, data.routines),
+              workoutHistory: mergeById(s.workoutHistory, data.workoutHistory).sort(
+                (a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
+              ),
+              measurements: mergeById(s.measurements, data.measurements),
+              progressPhotos: mergeById(s.progressPhotos, data.progressPhotos),
+            });
+          }
+        } catch (err) {
+          set(snapshot);
+          throw err;
+        }
+      },
+
+      undoLastRestore: () => {
+        const raw = localStorage.getItem(RESTORE_UNDO_KEY);
+        if (!raw) return false;
+        try {
+          const snapshot = JSON.parse(raw);
+          set({ ...snapshot, activeWorkout: null });
+          localStorage.removeItem(RESTORE_UNDO_KEY);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+
+      hasRestoreUndo: () =>
+        typeof localStorage !== 'undefined' &&
+        localStorage.getItem(RESTORE_UNDO_KEY) !== null,
     }),
     {
       name: 'ironpulse-storage-v3',
