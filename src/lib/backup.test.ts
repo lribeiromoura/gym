@@ -5,6 +5,7 @@ import {
   createBackup,
   mergeById,
   parseBackup,
+  resolveUserSettings,
   serializeBackup,
   summarizeBackup,
 } from './backup';
@@ -102,5 +103,26 @@ describe('backup', () => {
 
   it('gera nome de arquivo com data', () => {
     expect(backupFileName(new Date(2026, 10, 12))).toBe('ironpulse-backup-2026-11-12.json');
+  });
+
+  it('resolveUserSettings garante retrocompatibilidade com backups antigos sem theme ou showRpeColumn', () => {
+    const legacy = resolveUserSettings({
+      name: 'Atleta Antigo',
+      defaultRestSeconds: 120,
+    });
+    expect(legacy.name).toBe('Atleta Antigo');
+    expect(legacy.defaultRestSeconds).toBe(120);
+    expect(legacy.theme).toBe('dark');
+    expect(legacy.showRpeColumn).toBe(false);
+    expect(legacy.defaultBarWeightKg).toBe(20);
+
+    const customLight = resolveUserSettings({
+      theme: 'light',
+      showRpeColumn: true,
+      barbellWeightKg: 15,
+    });
+    expect(customLight.theme).toBe('light');
+    expect(customLight.showRpeColumn).toBe(true);
+    expect(customLight.defaultBarWeightKg).toBe(15);
   });
 });

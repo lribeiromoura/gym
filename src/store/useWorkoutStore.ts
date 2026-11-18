@@ -24,13 +24,22 @@ import {
   INITIAL_USER_SETTINGS,
   INITIAL_WORKOUT_HISTORY,
 } from '@/data/initial-data';
-import { evaluateWorkoutPRs, getPreviousExerciseSets } from '@/lib/calculations';
+import {
+  buildAutoWarmupSets,
+  evaluateWorkoutPRs,
+  getPreviousExerciseSets,
+} from '@/lib/calculations';
 import {
   cancelRestNotification,
   scheduleRestNotification,
 } from '@/lib/notifications';
 import { SharePayload } from '@/lib/share';
-import { BackupData, mergeById, RestoreMode } from '@/lib/backup';
+import {
+  BackupData,
+  mergeById,
+  resolveUserSettings,
+  RestoreMode,
+} from '@/lib/backup';
 
 const RESTORE_UNDO_KEY = 'ironpulse-restore-undo';
 
@@ -80,6 +89,7 @@ interface WorkoutStoreState {
     }
   ) => void;
   addSetToActiveExercise: (workoutExerciseId: string) => void;
+  generateWarmupSetsForActiveExercise: (workoutExerciseId: string) => void;
   removeSetFromActiveExercise: (workoutExerciseId: string, setId: string) => void;
   updateActiveSet: (
     workoutExerciseId: string,
@@ -94,7 +104,10 @@ interface WorkoutStoreState {
     }>
   ) => void;
   toggleCompleteSet: (workoutExerciseId: string, setId: string) => void;
-  finishActiveWorkout: (updateOriginalRoutine?: boolean) => WorkoutSession | null;
+  finishActiveWorkout: (
+    updateOriginalRoutine?: boolean,
+    markAllFilledSets?: boolean
+  ) => WorkoutSession | null;
   discardActiveWorkout: () => void;
   clearLastFinishedWorkout: () => void;
 
@@ -415,6 +428,39 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
         });
       },
 
+      generateWarmupSetsForActiveExercise: (workoutExerciseId) => {
+        const current = get().activeWorkout;
+        if (!current) return;
+        set({
+          activeWorkout: {
+            ...current,
+            exercises: current.exercises.map((ex) => {
+              if (ex.id !== workoutExerciseId) return ex;
+              const remainingSets = ex.sets.filter(
+                (s) => !(s.type === 'warmup' && !s.completed)
+              );
+              const firstNormal =
+                remainingSets.find(
+                  (s) => s.type === 'normal' && (s.weightKg ?? 0) > 0
+                ) ||
+                remainingSets.find((s) => s.type !== 'warmup') ||
+                ex.sets[0];
+              const baseWeight = firstNormal?.weightKg ?? 20;
+              const warmups = buildAutoWarmupSets(baseWeight);
+              const warmupSets: WorkoutSet[] = warmups.map((w) => ({
+                id: uid('ws'),
+                type: 'warmup',
+                weightKg: w.weightKg,
+                reps: w.reps,
+                completed: false,
+                prs: [],
+              }));
+              return { ...ex, sets: [...warmupSets, ...remainingSets] };
+            }),
+          },
+        });
+      },
+
       removeSetFromActiveExercise: (workoutExerciseId, setId) => {
         const current = get().activeWorkout;
         if (!current) return;
@@ -509,7 +555,10 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
         }
       },
 
-      finishActiveWorkout: (updateOriginalRoutine = false) => {
+      finishActiveWorkout: (
+        updateOriginalRoutine = false,
+        markAllFilledSets = false
+      ) => {
         const state = get();
         const current = state.activeWorkout;
         if (!current) return null;
@@ -519,10 +568,20 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
           ? state.workoutHistory.filter((w) => w.id !== current.editingSessionId)
           : state.workoutHistory;
 
+        const isFilledSet = (s: WorkoutSet) =>
+          ((s.weightKg ?? 0) > 0 && (s.reps ?? 0) > 0) ||
+          (s.durationSeconds ?? 0) > 0;
+
         const completedExercises = current.exercises
           .map((ex) => ({
             ...ex,
-            sets: ex.sets.filter((s) => s.completed),
+            sets: ex.sets
+              .map((s) =>
+                markAllFilledSets && !s.completed && isFilledSet(s)
+                  ? { ...s, completed: true }
+                  : s
+              )
+              .filter((s) => s.completed),
           }))
           .filter((ex) => ex.sets.length > 0);
 
@@ -973,7 +1032,8 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
       },
 
       updateSettings: (updates) => {
-        set({ settings: { ...get().settings, ...updates } });
+        const next = resolveUserSettings({ ...get().settings, ...updates });
+        set({ settings: next });
       },
 
       clearAllData: () => {
@@ -1020,7 +1080,7 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
               workoutHistory: data.workoutHistory,
               measurements: data.measurements,
               progressPhotos: data.progressPhotos,
-              settings: { ...INITIAL_USER_SETTINGS, ...data.settings },
+              settings: resolveUserSettings(data.settings),
               activeWorkout: null,
               lastFinishedWorkout: null,
             });
@@ -1034,6 +1094,7 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
               ),
               measurements: mergeById(s.measurements, data.measurements),
               progressPhotos: mergeById(s.progressPhotos, data.progressPhotos),
+              settings: resolveUserSettings({ ...data.settings, ...s.settings }),
             });
           }
         } catch (err) {
@@ -1047,7 +1108,11 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
         if (!raw) return false;
         try {
           const snapshot = JSON.parse(raw);
-          set({ ...snapshot, activeWorkout: null });
+          set({
+            ...snapshot,
+            settings: resolveUserSettings(snapshot?.settings),
+            activeWorkout: null,
+          });
           localStorage.removeItem(RESTORE_UNDO_KEY);
           return true;
         } catch {
@@ -1089,6 +1154,7 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
         return {
           ...currentState,
           ...persisted,
+          settings: resolveUserSettings(persisted.settings),
           exercises:
             mergedExercises.length > 0 ? mergedExercises : INITIAL_EXERCISES,
         };

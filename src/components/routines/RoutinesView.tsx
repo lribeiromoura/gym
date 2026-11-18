@@ -7,6 +7,7 @@ import {
   Copy,
   Dumbbell,
   Edit3,
+  Flame,
   Folder,
   FolderPlus,
   Layers,
@@ -14,7 +15,9 @@ import {
   Plus,
   Search,
   Share2,
+  Sparkles,
   Trash2,
+  Trophy,
   X,
 } from 'lucide-react';
 import {
@@ -28,6 +31,10 @@ import {
   WorkoutExercise,
 } from '@/types/workout';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
+import {
+  calculateWeeklyStreakStats,
+  getRoutineLastTrainedInfo,
+} from '@/lib/calculations';
 import {
   buildShareUrl,
   encodeFolderShareToken,
@@ -51,6 +58,7 @@ export function RoutinesView() {
   const folders = useWorkoutStore((s) => s.folders);
   const routines = useWorkoutStore((s) => s.routines);
   const exercises = useWorkoutStore((s) => s.exercises);
+  const workoutHistory = useWorkoutStore((s) => s.workoutHistory);
   const settings = useWorkoutStore((s) => s.settings);
 
   const startEmptyWorkout = useWorkoutStore((s) => s.startEmptyWorkout);
@@ -195,6 +203,43 @@ export function RoutinesView() {
   const toggleRoutineExpanded = (id: string) =>
     setExpandedRoutineIds((prev) => ({ ...prev, [id]: !prev[id] }));
 
+  const weeklyStats = useMemo(
+    () =>
+      calculateWeeklyStreakStats(
+        workoutHistory,
+        settings.weeklyWorkoutGoal || 4
+      ),
+    [workoutHistory, settings.weeklyWorkoutGoal]
+  );
+
+  const routineLastTrainedMap = useMemo(() => {
+    const map = new Map<
+      string,
+      ReturnType<typeof getRoutineLastTrainedInfo>
+    >();
+    for (const r of routines) {
+      map.set(r.id, getRoutineLastTrainedInfo(r, workoutHistory));
+    }
+    return map;
+  }, [routines, workoutHistory]);
+
+  const suggestedRoutineId = useMemo(() => {
+    if (routines.length === 0) return null;
+    let oldestId = routines[0].id;
+    let oldestTime =
+      routineLastTrainedMap.get(routines[0].id)?.timestamp ?? Infinity;
+
+    for (const r of routines) {
+      const info = routineLastTrainedMap.get(r.id);
+      const t = info?.timestamp ?? 0;
+      if (t < oldestTime) {
+        oldestTime = t;
+        oldestId = r.id;
+      }
+    }
+    return oldestId;
+  }, [routines, routineLastTrainedMap]);
+
   const renderRoutineCard = (routine: Routine) => {
     const totalSets = routine.exercises.reduce(
       (acc, e) => acc + e.sets.length,
@@ -212,11 +257,15 @@ export function RoutinesView() {
       .map((m) => (m ? MUSCLE_LABELS[m] : ''))
       .filter(Boolean)
       .join(' • ');
+    const lastInfo = routineLastTrainedMap.get(routine.id);
+    const isSuggested = suggestedRoutineId === routine.id;
 
     return (
       <div
         key={routine.id}
-        className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden transition"
+        className={`bg-white border rounded-2xl shadow-xs overflow-hidden transition ${
+          isSuggested ? 'border-[#3B82F6]/60' : 'border-slate-200'
+        }`}
       >
         {/* Cabeçalho do card (toque para expandir/recolher) */}
         <button
@@ -225,8 +274,21 @@ export function RoutinesView() {
           aria-expanded={isExpanded}
           className="w-full text-left px-4 pt-4 pb-3 flex items-start justify-between gap-3 active:bg-slate-50"
         >
-          <div className="min-w-0 flex-1 space-y-1">
-            <h4 className="text-lg font-extrabold text-slate-900 leading-tight truncate">
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              {isSuggested && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-[#3B82F6] font-extrabold text-[11px]">
+                  <Sparkles className="w-3 h-3" /> ✨ Próximo sugerido
+                </span>
+              )}
+              {lastInfo && (
+                <span className="text-xs font-medium text-slate-500">
+                  {isSuggested ? `• ${lastInfo.label}` : lastInfo.label}
+                </span>
+              )}
+            </div>
+
+            <h4 className="text-lg font-extrabold text-slate-900 leading-snug line-clamp-2">
               {routine.title}
             </h4>
             <p className="text-[13px] text-slate-500">
@@ -235,12 +297,12 @@ export function RoutinesView() {
               {totalSets} séries
             </p>
             {musclesLabel && (
-              <p className="text-[13px] font-semibold text-[#0084FF] truncate">
+              <p className="text-[13px] font-semibold text-[#3B82F6] truncate">
                 {musclesLabel}
               </p>
             )}
           </div>
-          <span className="w-10 h-10 rounded-full bg-[#F1F5F9] flex items-center justify-center shrink-0 text-slate-600">
+          <span className="w-11 h-11 rounded-full bg-[#F1F5F9] flex items-center justify-center shrink-0 text-slate-600">
             <ChevronDown
               className={`w-5 h-5 transition-transform ${
                 isExpanded ? 'rotate-180' : ''
@@ -254,7 +316,7 @@ export function RoutinesView() {
           <button
             type="button"
             onClick={() => startRoutineWorkout(routine.id)}
-            className="w-full h-12 rounded-xl bg-[#0084FF] hover:bg-blue-600 active:bg-blue-700 text-white font-bold text-[15px] flex items-center justify-center gap-2 transition"
+            className="w-full h-12 rounded-xl bg-[#2563EB] hover:bg-blue-600 active:bg-blue-700 text-white font-bold text-[15px] flex items-center justify-center gap-2 transition"
           >
             <Play className="w-4 h-4 fill-current" /> Iniciar Rotina
           </button>
@@ -354,52 +416,97 @@ export function RoutinesView() {
   };
 
   return (
-    <div className="space-y-6 pb-28">
+    <div className="space-y-5 pb-28">
+      {/* Widget Discreto de Meta Semanal e Ofensiva (Streak) */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Flame className="w-4 h-4 text-amber-500 shrink-0" />
+            <span className="text-xs sm:text-sm font-extrabold text-slate-900">
+              🔥 Meta Semanal: {weeklyStats.workoutsThisWeek} de{' '}
+              {weeklyStats.weeklyGoal} treinos
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold">
+            <Trophy className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <span>
+              {weeklyStats.consecutiveWeeks}{' '}
+              {weeklyStats.consecutiveWeeks === 1
+                ? 'semana na meta'
+                : 'semanas seguidas'}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-7 gap-1.5">
+          {weeklyStats.days.map((d) => (
+            <div
+              key={d.dateKey}
+              className={`py-2 px-1 rounded-xl border text-center flex flex-col items-center justify-center gap-1 transition ${
+                d.trained
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                  : d.isToday
+                  ? 'bg-blue-50 border-[#3B82F6] text-[#3B82F6]'
+                  : 'bg-slate-50 border-slate-200 text-slate-500'
+              }`}
+            >
+              <span className="text-[11px] font-bold uppercase">{d.label}</span>
+              <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-extrabold">
+                {d.trained ? (
+                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                ) : d.isToday ? (
+                  '○'
+                ) : (
+                  '·'
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Cabeçalho e Ações Rápidas */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
             Treino & Rotinas
           </h1>
           <p className="text-sm text-slate-500">
-            Inicie um treino imediato ou monte suas pastas e rotinas personalizadas
+            Escolha a próxima rotina sugerida ou inicie um treino livre
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setShowFolderModal(true)}
-            className="px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition"
+            className="h-11 px-3.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition"
           >
             <FolderPlus className="w-4 h-4 text-slate-600" /> Nova Pasta
           </button>
           <button
             onClick={() => openNewRoutineEditor()}
-            className="px-4 py-2 rounded-xl bg-[#0084FF] hover:bg-blue-600 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition"
+            className="h-11 px-4 rounded-xl bg-[#2563EB] hover:bg-blue-600 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition"
           >
             <Plus className="w-4 h-4" /> Nova Rotina
           </button>
         </div>
       </div>
 
-      {/* Card de Início Rápido (Treino Livre Vazio) */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
-        <div className="space-y-1">
-          <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-[#0084FF] text-[10px] font-extrabold uppercase tracking-wider">
-            Início Rápido
-          </span>
-          <h2 className="text-lg font-extrabold text-slate-900">
-            Iniciar Treino Livre (Em Branco)
+      {/* Barra Compacta de Treino Livre (Em Branco) */}
+      <div className="bg-white border border-slate-200 rounded-2xl px-4 py-3 flex items-center justify-between gap-3 shadow-xs">
+        <div className="min-w-0">
+          <h2 className="text-sm font-extrabold text-slate-900 truncate">
+            ⚡ Iniciar Treino Livre (Em Branco)
           </h2>
-          <p className="text-xs text-slate-500">
-            Adicione exercícios conforme treina, com cronômetro de descanso, RPE e detecção automática de recordes.
+          <p className="text-xs text-slate-500 truncate">
+            Adicione exercícios na hora, com descanso e recordes automáticos
           </p>
         </div>
         <button
           onClick={() => startEmptyWorkout('Treino Livre')}
-          className="px-5 py-3 rounded-full bg-[#0084FF] hover:bg-blue-600 text-white font-bold text-sm flex items-center justify-center gap-2 shrink-0 shadow-sm transition"
+          className="h-11 px-4 rounded-xl bg-[#F1F5F9] hover:bg-slate-200 border border-slate-200 text-slate-900 font-bold text-xs flex items-center justify-center gap-1.5 shrink-0 transition"
         >
-          <Play className="w-4 h-4 fill-current" /> Iniciar Treino Vazio
+          <Play className="w-3.5 h-3.5 fill-current text-[#3B82F6]" /> Iniciar Vazio
         </button>
       </div>
 
@@ -418,13 +525,13 @@ export function RoutinesView() {
           <div className="flex justify-center gap-2">
             <button
               onClick={() => setShowFolderModal(true)}
-              className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700"
+              className="h-11 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700 flex items-center justify-center"
             >
               + Criar Pasta
             </button>
             <button
               onClick={() => openNewRoutineEditor()}
-              className="px-4 py-2 rounded-xl bg-[#0084FF] hover:bg-blue-600 text-xs font-bold text-white"
+              className="h-11 px-4 rounded-xl bg-[#0084FF] hover:bg-blue-600 text-xs font-bold text-white flex items-center justify-center"
             >
               + Criar Rotina
             </button>
@@ -542,19 +649,19 @@ export function RoutinesView() {
               value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
               placeholder="Nome da pasta..."
-              className="w-full px-3.5 py-2.5 rounded-xl bg-[#F1F5F9] border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-[#0084FF]"
+              className="w-full h-11 px-3.5 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900 focus:outline-none focus:border-[#0084FF]"
             />
             <div className="flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setShowFolderModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-100 text-xs font-semibold text-slate-700"
+                className="h-11 px-4 rounded-xl bg-slate-100 text-xs font-semibold text-slate-700"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 rounded-xl bg-[#0084FF] text-xs font-bold text-white"
+                className="h-11 px-4 rounded-xl bg-[#0084FF] text-xs font-bold text-white"
               >
                 Criar Pasta
               </button>
@@ -573,7 +680,8 @@ export function RoutinesView() {
               </h3>
               <button
                 onClick={() => setEditingRoutine(null)}
-                className="p-1 text-slate-400 hover:text-slate-700"
+                aria-label="Fechar editor de rotina"
+                className="w-11 h-11 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -599,7 +707,7 @@ export function RoutinesView() {
                       })
                     }
                     placeholder="Ex: Treino A — Superiores"
-                    className="w-full px-3.5 py-2 rounded-xl bg-[#F1F5F9] border border-slate-200 text-sm text-slate-900"
+                    className="w-full h-11 px-3.5 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"
                   />
                 </div>
                 <div>
@@ -614,7 +722,7 @@ export function RoutinesView() {
                         folderId: e.target.value || null,
                       })
                     }
-                    className="w-full px-3 py-2 rounded-xl bg-[#F1F5F9] border border-slate-200 text-sm text-slate-900"
+                    className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"
                   >
                     <option value="">Sem Pasta</option>
                     {folders.map((f) => (
@@ -640,7 +748,7 @@ export function RoutinesView() {
                     })
                   }
                   placeholder="Observações..."
-                  className="w-full px-3.5 py-2 rounded-xl bg-[#F1F5F9] border border-slate-200 text-xs text-slate-900"
+                  className="w-full h-11 px-3.5 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"
                 />
               </div>
 
@@ -817,12 +925,13 @@ export function RoutinesView() {
                         value={exQuery}
                         onChange={(e) => setExQuery(e.target.value)}
                         placeholder="Digite o nome do exercício para buscar ou criar..."
-                        className="w-full bg-transparent text-xs text-slate-900 focus:outline-none"
+                        className="w-full h-11 bg-transparent text-base text-slate-900 focus:outline-none"
                       />
                       <button
                         type="button"
+                        aria-label="Fechar busca de exercício"
                         onClick={() => setShowExSearch(false)}
-                        className="text-slate-400"
+                        className="w-11 h-11 flex items-center justify-center text-slate-400"
                       >
                         <X className="w-4 h-4" />
                       </button>

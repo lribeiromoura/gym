@@ -105,7 +105,7 @@ export function DecimalInput({
       }}
       onBlur={handleBlur}
       onChange={handleChange}
-      className={className}
+      className={`text-base tabular-nums ${className}`}
     />
   );
 }
@@ -181,7 +181,7 @@ export function IntegerInput({
       }}
       onBlur={handleBlur}
       onChange={handleChange}
-      className={className}
+      className={`text-base tabular-nums ${className}`}
     />
   );
 }

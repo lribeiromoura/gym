@@ -23,18 +23,18 @@ export function BodyHeatmapSVG({
 
   const getMuscleColor = (muscle: MuscleGroup): string => {
     if (highlightPrimary) {
-      if (muscle === highlightPrimary) return '#0084FF';
-      if (highlightSecondary.includes(muscle)) return '#60A5FA';
-      return '#CBD5E1';
+      if (muscle === highlightPrimary) return '#3B82F6';
+      if (highlightSecondary.includes(muscle)) return '#7DD3FC';
+      return '#475569';
     }
 
-    if (!muscleScores || !muscleScores[muscle]) return '#CBD5E1';
+    if (!muscleScores || !muscleScores[muscle]) return '#475569';
     const score = muscleScores[muscle].score;
-    if (score <= 0) return '#CBD5E1';
-    if (score < 3) return '#93C5FD';
+    if (score <= 0) return '#475569';
+    if (score < 3) return '#7DD3FC';
     if (score < 6) return '#3B82F6';
-    if (score < 10) return '#0084FF';
-    return '#1D4ED8';
+    if (score < 10) return '#1D4ED8';
+    return '#F59E0B';
   };
 
   const handleSelect = (muscle: MuscleGroup) => {
@@ -347,22 +347,27 @@ export function BodyHeatmapSVG({
       </div>
 
       {!compact && !highlightPrimary && (
-        <div className="w-full mt-3 space-y-2">
-          <div className="flex flex-wrap items-center justify-center gap-3 text-[11px] text-slate-500">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm bg-[#CBD5E1]" /> 0 séries
+        <div className="w-full mt-3 space-y-2.5">
+          <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-slate-600">
+            <span className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 flex items-center gap-1.5 font-medium">
+              <span className="w-3.5 h-3.5 rounded-sm bg-[#475569] border border-white/20 shrink-0" />
+              <span>0 séries</span>
             </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm bg-[#93C5FD]" /> 1–3 séries
+            <span className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 flex items-center gap-1.5 font-medium">
+              <span className="w-3.5 h-3.5 rounded-sm bg-[#7DD3FC] border border-sky-400/50 shrink-0" />
+              <span>1–3 séries</span>
             </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm bg-[#3B82F6]" /> 4–6 séries
+            <span className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 flex items-center gap-1.5 font-medium">
+              <span className="w-3.5 h-3.5 rounded-sm bg-[#3B82F6] border border-blue-400/50 shrink-0" />
+              <span>4–6 séries</span>
             </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm bg-[#0084FF]" /> 7–10 séries
+            <span className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 flex items-center gap-1.5 font-medium">
+              <span className="w-3.5 h-3.5 rounded-sm bg-[#1D4ED8] border border-indigo-400/50 shrink-0" />
+              <span>7–10 séries</span>
             </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm bg-[#1D4ED8]" /> 10+ (Alta Carga)
+            <span className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 flex items-center gap-1.5 font-semibold">
+              <span className="w-3.5 h-3.5 rounded-sm bg-[#F59E0B] border border-amber-300/60 shrink-0" />
+              <span>10+ (Alta Carga)</span>
             </span>
           </div>
 

@@ -3,14 +3,17 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlarmClock,
+  AlertTriangle,
   ArrowUpDown,
   Award,
+  Calculator,
   Check,
   ChevronDown,
   ChevronUp,
   Clock,
   Dumbbell,
   FilePlus2,
+  Flame,
   Gauge,
   Plus,
   RefreshCw,
@@ -19,6 +22,7 @@ import {
   Trash2,
   Trophy,
   MoreVertical,
+  WifiOff,
   X,
 } from 'lucide-react';
 import {
@@ -32,8 +36,8 @@ import {
 } from '@/types/workout';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import {
-  calculate1RM,
   calculateMuscleDistribution,
+  calculatePlatesPerSide,
   formatDuration,
   formatTimerClock,
   getPreviousExerciseSets,
@@ -44,7 +48,7 @@ import {
   enableRestTimerNotifications,
   getNotificationPermissionState,
 } from '@/lib/notifications';
-import { searchExerciseDB } from '@/lib/exercisedb';
+import { searchExerciseDBWithStatus } from '@/lib/exercisedb';
 import {
   DecimalInput,
   formatPtBrNumber,
@@ -523,7 +527,9 @@ function SwipeableSetRow({
             : 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)',
         }}
         className={`relative z-10 grid grid-cols-12 gap-1.5 items-center px-4 py-1.5 transition-colors ${
-          completed ? 'bg-[#DCFCE7]' : 'bg-white'
+          completed
+            ? 'bg-emerald-500/14 border-l-3 border-l-emerald-500'
+            : 'bg-white'
         }`}
       >
         {children}
@@ -559,6 +565,9 @@ export function ActiveWorkoutDrawer() {
   const addSetToActiveExercise = useWorkoutStore(
     (s) => s.addSetToActiveExercise
   );
+  const generateWarmupSetsForActiveExercise = useWorkoutStore(
+    (s) => s.generateWarmupSetsForActiveExercise
+  );
   const removeSetFromActiveExercise = useWorkoutStore(
     (s) => s.removeSetFromActiveExercise
   );
@@ -571,6 +580,7 @@ export function ActiveWorkoutDrawer() {
   );
   const addCustomExercise = useWorkoutStore((s) => s.addCustomExercise);
   const importExercisesBatch = useWorkoutStore((s) => s.importExercisesBatch);
+  const updateSettings = useWorkoutStore((s) => s.updateSettings);
 
   const tickRestTimer = useWorkoutStore((s) => s.tickRestTimer);
   const adjustRestTimer = useWorkoutStore((s) => s.adjustRestTimer);
@@ -600,6 +610,7 @@ export function ActiveWorkoutDrawer() {
     targetWorkoutExerciseId?: string;
   } | null>(null);
   const [pickerSearch, setPickerSearch] = useState('');
+  const [isPickerOffline, setIsPickerOffline] = useState(false);
   const [quickExMuscle, setQuickExMuscle] = useState<MuscleGroup>('chest');
   const [quickExEquip, setQuickExEquip] = useState<EquipmentType>('barbell');
 
@@ -608,9 +619,13 @@ export function ActiveWorkoutDrawer() {
     if (!showExercisePicker || q.length < 3) return;
     let cancelled = false;
     const timer = setTimeout(async () => {
-      const results = await searchExerciseDB(q);
-      if (!cancelled && results.length > 0) {
-        importExercisesBatch(results);
+      const { exercises: results, isOffline } =
+        await searchExerciseDBWithStatus(q);
+      if (!cancelled) {
+        setIsPickerOffline(isOffline);
+        if (results.length > 0) {
+          importExercisesBatch(results);
+        }
       }
     }, 400);
     return () => {
@@ -633,12 +648,36 @@ export function ActiveWorkoutDrawer() {
   // Estado de quais exercícios estão com o campo de Nota aberto
   const [openNotesIds, setOpenNotesIds] = useState<Record<string, boolean>>({});
 
+  // Estado de quais exercícios estão com o seletor rápido de descanso aberto
+  const [openRestSelectorIds, setOpenRestSelectorIds] = useState<
+    Record<string, boolean>
+  >({});
+
+  // Estado do Bottom Sheet de Série (Tipo + Gerador de Aquecimento + Excluir Série)
+  const [activeSetSheet, setActiveSetSheet] = useState<{
+    workoutExerciseId: string;
+    setId: string;
+    setNumberLabel: string;
+    currentType: SetType;
+  } | null>(null);
+
+  // Estado da Calculadora de Anilhas por Lado da Barra
+  const [plateCalcModal, setPlateCalcModal] = useState<{
+    workoutExerciseId: string;
+    setId?: string;
+    exerciseTitle: string;
+    totalWeightKg: number;
+    barWeightKg: number;
+  } | null>(null);
+
   // Estado de seletor de RPE ativo para uma série específica
   const [activeRpePicker, setActiveRpePicker] = useState<{
     workoutExerciseId: string;
     setId: string;
     currentRpe: RPEValue;
   } | null>(null);
+
+  const showRpeColumn = Boolean(settings?.showRpeColumn);
 
   const isEditingSession = !!activeWorkout?.editingSessionId;
 
@@ -804,28 +843,29 @@ export function ActiveWorkoutDrawer() {
 
   if (!activeWorkout) return null;
 
-  // Mini-Player quando minimizado
+  // Mini-Player ancorado logo acima da barra de navegação inferior mobile (sem sobreposição)
   if (activeWorkout.isMinimized) {
     return (
-      <div className="fixed bottom-20 md:bottom-4 left-2 right-2 md:left-72 md:right-6 z-40">
-        <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-2xl flex items-center justify-between gap-3">
+      <div className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-4 inset-x-0 md:left-72 md:right-6 z-40 px-2 md:px-0">
+        <div className="bg-[#1E293B] text-[#F8FAFC] border-t-2 border-t-[#3B82F6] border border-[#243044] rounded-2xl px-3.5 py-2.5 shadow-2xl flex items-center justify-between gap-3">
           <div
             onClick={() => toggleMinimizeWorkout(false)}
-            className="flex items-center gap-3 cursor-pointer flex-1 min-w-0"
+            className="flex items-center gap-3 cursor-pointer flex-1 min-w-0 min-h-[44px]"
           >
-            <div className="w-10 h-10 rounded-full bg-[#0084FF] text-white flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-[#2563EB] text-white flex items-center justify-center shrink-0">
               <Dumbbell className="w-5 h-5" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-[#0084FF]">
-                  Treino em Andamento
+                <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-xs font-bold text-[#3B82F6]">
+                  Em andamento
                 </span>
-                <span className="text-xs font-mono font-semibold text-slate-500">
-                  {formatShortElapsed(elapsedSeconds)}
+                <span className="text-xs font-mono font-semibold text-[#94A3B8] tabular-nums">
+                  • {formatShortElapsed(elapsedSeconds)}
                 </span>
               </div>
-              <p className="text-sm font-bold text-slate-900 truncate">
+              <p className="text-sm font-bold text-[#F8FAFC] truncate">
                 {activeWorkout.title}
               </p>
             </div>
@@ -833,16 +873,16 @@ export function ActiveWorkoutDrawer() {
 
           <div className="flex items-center gap-2 shrink-0">
             {restTimer.isActive && (
-              <div className="px-3 py-1.5 rounded-xl bg-blue-50 text-[#0084FF] text-xs font-mono font-bold flex items-center gap-1">
+              <div className="h-11 px-3 rounded-xl bg-[#3B82F6]/20 border border-[#3B82F6]/40 text-[#60A5FA] text-xs font-mono font-bold flex items-center gap-1 tabular-nums">
                 <Timer className="w-3.5 h-3.5" />
                 {formatTimerClock(restTimer.remainingSeconds)}
               </div>
             )}
             <button
               onClick={() => toggleMinimizeWorkout(false)}
-              className="px-4 py-2 rounded-full bg-[#0084FF] text-white text-xs font-bold flex items-center gap-1"
+              className="h-11 px-4 rounded-xl bg-[#2563EB] hover:bg-blue-600 text-white text-xs font-bold flex items-center gap-1 shadow-sm"
             >
-              <ChevronUp className="w-4 h-4" /> Abrir
+              <ChevronUp className="w-4 h-4" /> Retomar
             </button>
           </div>
         </div>
@@ -863,7 +903,7 @@ export function ActiveWorkoutDrawer() {
           <button
             onClick={() => toggleMinimizeWorkout(true)}
             aria-label="Minimizar treino"
-            className="w-10 h-10 rounded-full bg-[#F1F5F9] hover:bg-slate-200 flex items-center justify-center text-slate-800 transition"
+            className="w-11 h-11 rounded-full bg-[#F1F5F9] hover:bg-slate-200 flex items-center justify-center text-slate-800 transition"
           >
             <ChevronDown className="w-5 h-5 stroke-[2.2]" />
           </button>
@@ -882,7 +922,7 @@ export function ActiveWorkoutDrawer() {
               startRestTimer(settings.defaultRestSeconds, 'Descanso');
             }}
             aria-label="Timer de descanso"
-            className="w-10 h-10 rounded-full bg-[#F1F5F9] hover:bg-slate-200 flex items-center justify-center text-slate-800 transition"
+            className="w-11 h-11 rounded-full bg-[#F1F5F9] hover:bg-slate-200 flex items-center justify-center text-slate-800 transition"
           >
             <AlarmClock className="w-5 h-5 stroke-[2]" />
           </button>
@@ -892,7 +932,7 @@ export function ActiveWorkoutDrawer() {
                 ? finishActiveWorkout(false)
                 : setShowFinishModal(true)
             }
-            className="px-5 py-2.5 rounded-full bg-[#0084FF] hover:bg-blue-600 text-white font-semibold text-[15px] shadow-sm transition"
+            className="h-11 px-5 rounded-full bg-[#2563EB] hover:bg-blue-600 text-white font-semibold text-[15px] shadow-sm flex items-center justify-center transition"
           >
             Concluir
           </button>
@@ -988,10 +1028,18 @@ export function ActiveWorkoutDrawer() {
               workoutHistory,
               activeWorkout.editingSessionId
             );
+            const prevWorkingSets = prevSets.filter(
+              (ps) => ps.type !== 'warmup'
+            );
+            const prevWarmupSets = prevSets.filter(
+              (ps) => ps.type === 'warmup'
+            );
             const isNoteOpen =
               !!openNotesIds[workoutEx.id] || Boolean(workoutEx.notes);
 
             let normalSetCounter = 0;
+            let workingSetCounter = 0;
+            let warmupSetCounter = 0;
 
             return (
               <div key={workoutEx.id} className="py-5 space-y-3.5 bg-white">
@@ -1023,30 +1071,63 @@ export function ActiveWorkoutDrawer() {
                     type="button"
                     aria-label="Opções do exercício"
                     onClick={() => setMenuWorkoutExerciseId(workoutEx.id)}
-                    className="p-2 rounded-full text-slate-700 hover:bg-slate-100 transition shrink-0"
+                    className="w-11 h-11 rounded-full flex items-center justify-center text-slate-700 hover:bg-slate-100 transition shrink-0"
                   >
                     <MoreVertical className="w-5 h-5" />
                   </button>
                 </div>
 
-                {/* Linha 2: Pílulas [⏱ Descanso: 1min 30s] e [📄+ Nota] */}
-                <div className="px-4 flex flex-wrap items-center gap-2.5">
+                {/* Linha 2: Pílulas [⏱ Descanso] [🧮 Anilhas] e [📄+ Nota] */}
+                <div className="px-4 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() =>
-                      updateExerciseNotesOrRest(workoutEx.id, {
-                        restTimerSeconds: cycleRestTime(
-                          workoutEx.restTimerSeconds
-                        ),
-                      })
+                      setOpenRestSelectorIds((prev) => ({
+                        ...prev,
+                        [workoutEx.id]: !prev[workoutEx.id],
+                      }))
                     }
-                    className="px-3.5 py-2 rounded-xl bg-[#F1F5F9] hover:bg-slate-200 text-slate-900 text-[14px] font-medium flex items-center gap-2 transition"
+                    className="h-11 px-3.5 rounded-xl bg-[#F1F5F9] hover:bg-slate-200 text-slate-900 text-sm font-medium flex items-center gap-2 transition"
                   >
-                    <Clock className="w-4 h-4 text-slate-700" />
+                    <Clock className="w-4 h-4 text-[#3B82F6]" />
                     <span>
                       Descanso: {formatRestLabel(workoutEx.restTimerSeconds)}
                     </span>
+                    <ChevronDown
+                      className={`w-4 h-4 transition-transform ${
+                        openRestSelectorIds[workoutEx.id] ? 'rotate-180' : ''
+                      }`}
+                    />
                   </button>
+
+                  {meta?.measurementType !== 'duration' &&
+                    meta?.measurementType !== 'distance_duration' &&
+                    meta?.measurementType !== 'bodyweight_reps' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const targetSet =
+                            workoutEx.sets.find((st) => !st.completed) ||
+                            workoutEx.sets[0];
+                          const currentWeight = targetSet?.weightKg ?? 60;
+                          const defaultBar =
+                            settings.barbellWeightKg ??
+                            settings.defaultBarWeightKg ??
+                            20;
+                          setPlateCalcModal({
+                            workoutExerciseId: workoutEx.id,
+                            setId: targetSet?.id,
+                            exerciseTitle: meta?.title || 'Exercício',
+                            totalWeightKg: currentWeight > 0 ? currentWeight : 60,
+                            barWeightKg: defaultBar,
+                          });
+                        }}
+                        className="h-11 px-3.5 rounded-xl bg-[#F1F5F9] hover:bg-slate-200 text-slate-900 text-sm font-medium flex items-center gap-2 transition"
+                      >
+                        <Calculator className="w-4 h-4 text-[#3B82F6]" />
+                        <span>🧮 Anilhas</span>
+                      </button>
+                    )}
 
                   <button
                     type="button"
@@ -1056,12 +1137,53 @@ export function ActiveWorkoutDrawer() {
                         [workoutEx.id]: !prev[workoutEx.id],
                       }))
                     }
-                    className="px-3.5 py-2 rounded-xl bg-[#F1F5F9] hover:bg-slate-200 text-slate-900 text-[14px] font-medium flex items-center gap-2 transition"
+                    className="h-11 px-3.5 rounded-xl bg-[#F1F5F9] hover:bg-slate-200 text-slate-900 text-sm font-medium flex items-center gap-2 transition"
                   >
                     <FilePlus2 className="w-4 h-4 text-slate-700" />
                     <span>Nota</span>
                   </button>
                 </div>
+
+                {/* Seletor Direto de Descanso em Pílulas de 1 Toque */}
+                {openRestSelectorIds[workoutEx.id] && (
+                  <div className="px-4">
+                    <div className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200 flex flex-wrap items-center gap-1.5 animate-fadeIn">
+                      {[
+                        { label: 'Desligado', val: 0 },
+                        { label: '45s', val: 45 },
+                        { label: '1m', val: 60 },
+                        { label: '1m 30s', val: 90 },
+                        { label: '2m', val: 120 },
+                        { label: '3m', val: 180 },
+                      ].map((opt) => {
+                        const isSelected =
+                          workoutEx.restTimerSeconds === opt.val;
+                        return (
+                          <button
+                            key={opt.val}
+                            type="button"
+                            onClick={() => {
+                              updateExerciseNotesOrRest(workoutEx.id, {
+                                restTimerSeconds: opt.val,
+                              });
+                              setOpenRestSelectorIds((prev) => ({
+                                ...prev,
+                                [workoutEx.id]: false,
+                              }));
+                            }}
+                            className={`h-11 px-3.5 rounded-xl text-xs font-bold transition ${
+                              isSelected
+                                ? 'bg-[#2563EB] text-white shadow-xs'
+                                : 'bg-white border border-slate-200 text-slate-700 hover:border-[#3B82F6]'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Campo de Nota quando ativo */}
                 {isNoteOpen && (
@@ -1075,39 +1197,67 @@ export function ActiveWorkoutDrawer() {
                         })
                       }
                       placeholder="Adicionar nota ao exercício (ex: ajuste do banco, pegada...)"
-                      className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#0084FF]"
+                      className="w-full h-11 px-3.5 rounded-xl bg-slate-50 border border-slate-200 text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#3B82F6]"
                     />
                   </div>
                 )}
 
-                {/* Tabela de Séries (SÉRIE | ANTERIOR | KG | REPS | RPE | ✓) */}
+                {/* Tabela de Séries (SÉRIE | ANTERIOR | KG | REPS | [RPE] | ✓) */}
                 <div className="space-y-1 pt-1">
-                  <div className="grid grid-cols-12 gap-1.5 px-4 pb-1 text-[11px] font-medium uppercase tracking-wide text-slate-400 items-center">
+                  <div className="grid grid-cols-12 gap-1.5 px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500 items-center">
                     <div className="col-span-2 text-left">SÉRIE</div>
                     <div className="col-span-3 text-left">ANTERIOR</div>
-                    <div className="col-span-2 text-center flex items-center justify-center gap-1">
-                      <Dumbbell className="w-3 h-3" />
+                    <div
+                      className={`${
+                        showRpeColumn ? 'col-span-2' : 'col-span-3'
+                      } text-center flex items-center justify-center gap-1`}
+                    >
+                      <Dumbbell className="w-3.5 h-3.5" />
                       <span>
                         {meta?.measurementType === 'distance_duration'
                           ? 'KM'
                           : 'KG'}
                       </span>
                     </div>
-                    <div className="col-span-2 text-center">
+                    <div
+                      className={`${
+                        showRpeColumn ? 'col-span-2' : 'col-span-3'
+                      } text-center`}
+                    >
                       {meta?.measurementType === 'duration' ||
                       meta?.measurementType === 'distance_duration'
                         ? 'SEG'
                         : 'REPS'}
                     </div>
-                    <div className="col-span-2 text-center">RPE</div>
+                    {showRpeColumn && (
+                      <div className="col-span-2 text-center">RPE</div>
+                    )}
                     <div className="col-span-1 text-center">✓</div>
                   </div>
 
-                  {workoutEx.sets.map((s, setIdx) => {
+                  {workoutEx.sets.map((s) => {
                     if (s.type === 'normal') normalSetCounter += 1;
-                    const prevSet = prevSets[setIdx];
-                    const fallbackPrevWeight = prevSet?.weightKg ?? s.weightKg ?? 0;
-                    const fallbackPrevReps = prevSet?.reps ?? s.reps ?? 0;
+                    if (s.type === 'warmup') {
+                      warmupSetCounter += 1;
+                    } else {
+                      workingSetCounter += 1;
+                    }
+                    const prevSet =
+                      s.type === 'warmup'
+                        ? prevWarmupSets[warmupSetCounter - 1]
+                        : prevWorkingSets[workingSetCounter - 1];
+                    const hasPrevValues =
+                      Boolean(prevSet) &&
+                      ((prevSet?.weightKg ?? 0) > 0 ||
+                        (prevSet?.reps ?? 0) > 0);
+                    const setLabel =
+                      s.type === 'warmup'
+                        ? 'W'
+                        : s.type === 'dropset'
+                        ? 'D'
+                        : s.type === 'failure'
+                        ? 'F'
+                        : String(normalSetCounter);
 
                     return (
                       <SwipeableSetRow
@@ -1118,18 +1268,22 @@ export function ActiveWorkoutDrawer() {
                           removeSetFromActiveExercise(workoutEx.id, s.id)
                         }
                       >
-                        {/* SÉRIE (1, 2, 3, W, D, F) */}
+                        {/* SÉRIE (1, 2, 3, W, D, F) — Abre Bottom Sheet de Série */}
                         <div className="col-span-2 flex items-center">
                           <button
                             type="button"
+                            aria-label={`Opções e tipo da série ${setLabel}`}
                             onClick={() =>
-                              updateActiveSet(workoutEx.id, s.id, {
-                                type: cycleSetType(s.type),
+                              setActiveSetSheet({
+                                workoutExerciseId: workoutEx.id,
+                                setId: s.id,
+                                setNumberLabel: setLabel,
+                                currentType: s.type,
                               })
                             }
-                            className={`w-9 h-8 rounded-lg font-bold text-[15px] flex items-center justify-center transition ${
+                            className={`w-11 h-11 rounded-xl font-bold text-[15px] flex items-center justify-center transition ${
                               s.completed
-                                ? 'bg-[#BBF7D0] text-slate-900'
+                                ? 'bg-emerald-500/25 text-emerald-700 dark:text-emerald-300'
                                 : s.type === 'warmup'
                                 ? 'bg-amber-100 text-amber-700'
                                 : s.type === 'dropset'
@@ -1139,20 +1293,15 @@ export function ActiveWorkoutDrawer() {
                                 : 'bg-[#F1F5F9] text-slate-900'
                             }`}
                           >
-                            {s.type === 'warmup'
-                              ? 'W'
-                              : s.type === 'dropset'
-                              ? 'D'
-                              : s.type === 'failure'
-                              ? 'F'
-                              : normalSetCounter}
+                            {setLabel}
                           </button>
                         </div>
 
-                        {/* ANTERIOR */}
+                        {/* ANTERIOR (min-h-[44px] com ícone sutil ↵) */}
                         <div className="col-span-3">
                           <button
                             type="button"
+                            aria-label="Copiar peso e repetições anteriores"
                             onClick={() => {
                               if (prevSet) {
                                 updateActiveSet(workoutEx.id, s.id, {
@@ -1161,16 +1310,37 @@ export function ActiveWorkoutDrawer() {
                                 });
                               }
                             }}
-                            className="text-[14px] text-slate-400 font-normal truncate block text-left"
+                            className="min-h-[44px] w-full text-sm text-slate-500 font-medium flex items-center gap-1 text-left tabular-nums"
                           >
-                            {fallbackPrevWeight > 0 || fallbackPrevReps > 0
-                              ? `${formatPtBrNumber(fallbackPrevWeight)}kg x ${fallbackPrevReps}`
-                              : '—'}
+                            {hasPrevValues && prevSet ? (
+                              <>
+                                <span className="truncate">
+                                  {formatPtBrNumber(prevSet.weightKg ?? 0)}kg ×{' '}
+                                  {prevSet.reps ?? 0}
+                                </span>
+                                <span
+                                  aria-hidden="true"
+                                  className="text-xs text-[#3B82F6] shrink-0"
+                                >
+                                  ↵
+                                </span>
+                              </>
+                            ) : s.type === 'warmup' ? (
+                              <span className="text-xs text-amber-600 font-semibold truncate">
+                                Aquecimento
+                              </span>
+                            ) : (
+                              <span>—</span>
+                            )}
                           </button>
                         </div>
 
                         {/* KG */}
-                        <div className="col-span-2">
+                        <div
+                          className={
+                            showRpeColumn ? 'col-span-2' : 'col-span-3'
+                          }
+                        >
                           {meta?.measurementType === 'distance_duration' ? (
                             <DecimalInput
                               value={s.distanceKm}
@@ -1180,10 +1350,10 @@ export function ActiveWorkoutDrawer() {
                                   distanceKm: val,
                                 })
                               }
-                              className={`w-full h-9 text-center rounded-xl text-[15px] font-semibold focus:outline-none ${
+                              className={`w-full h-11 text-center rounded-xl text-base tabular-nums font-semibold focus:outline-none ${
                                 s.completed
                                   ? 'bg-transparent text-slate-900 font-bold'
-                                  : 'bg-white border border-slate-200 text-slate-700 focus:border-[#0084FF]'
+                                  : 'bg-[#F1F5F9] border border-slate-200 text-slate-900 focus:border-[#3B82F6]'
                               }`}
                             />
                           ) : (
@@ -1195,17 +1365,21 @@ export function ActiveWorkoutDrawer() {
                                   weightKg: val,
                                 })
                               }
-                              className={`w-full h-9 text-center rounded-xl text-[15px] font-semibold focus:outline-none ${
+                              className={`w-full h-11 text-center rounded-xl text-base tabular-nums font-semibold focus:outline-none ${
                                 s.completed
                                   ? 'bg-transparent text-slate-900 font-bold'
-                                  : 'bg-white border border-slate-200 text-slate-700 focus:border-[#0084FF]'
+                                  : 'bg-[#F1F5F9] border border-slate-200 text-slate-900 focus:border-[#3B82F6]'
                               }`}
                             />
                           )}
                         </div>
 
                         {/* REPS */}
-                        <div className="col-span-2">
+                        <div
+                          className={
+                            showRpeColumn ? 'col-span-2' : 'col-span-3'
+                          }
+                        >
                           {meta?.measurementType === 'duration' ||
                           meta?.measurementType === 'distance_duration' ? (
                             <IntegerInput
@@ -1216,10 +1390,10 @@ export function ActiveWorkoutDrawer() {
                                   durationSeconds: val,
                                 })
                               }
-                              className={`w-full h-9 text-center rounded-xl text-[15px] font-semibold focus:outline-none ${
+                              className={`w-full h-11 text-center rounded-xl text-base tabular-nums font-semibold focus:outline-none ${
                                 s.completed
                                   ? 'bg-transparent text-slate-900 font-bold'
-                                  : 'bg-white border border-slate-200 text-slate-700 focus:border-[#0084FF]'
+                                  : 'bg-[#F1F5F9] border border-slate-200 text-slate-900 focus:border-[#3B82F6]'
                               }`}
                             />
                           ) : (
@@ -1231,44 +1405,46 @@ export function ActiveWorkoutDrawer() {
                                   reps: val,
                                 })
                               }
-                              className={`w-full h-9 text-center rounded-xl text-[15px] font-semibold focus:outline-none ${
+                              className={`w-full h-11 text-center rounded-xl text-base tabular-nums font-semibold focus:outline-none ${
                                 s.completed
                                   ? 'bg-transparent text-slate-900 font-bold'
-                                  : 'bg-white border border-slate-200 text-slate-700 focus:border-[#0084FF]'
+                                  : 'bg-[#F1F5F9] border border-slate-200 text-slate-900 focus:border-[#3B82F6]'
                               }`}
                             />
                           )}
                         </div>
 
-                        {/* RPE (Botão com ícone de velocímetro idêntico às imagens) */}
-                        <div className="col-span-2 flex justify-center">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setActiveRpePicker({
-                                workoutExerciseId: workoutEx.id,
-                                setId: s.id,
-                                currentRpe: s.rpe ?? null,
-                              })
-                            }
-                            aria-label="Selecionar RPE"
-                            className={`w-11 h-9 rounded-xl flex items-center justify-center text-xs font-bold transition ${
-                              s.completed
-                                ? 'bg-[#BBF7D0]/80 text-slate-700'
-                                : 'bg-[#F1F5F9] text-slate-400 hover:text-slate-700'
-                            }`}
-                          >
-                            {s.rpe ? (
-                              <span className="text-slate-900 font-bold">
-                                {s.rpe}
-                              </span>
-                            ) : (
-                              <Gauge className="w-4 h-4 stroke-[1.8]" />
-                            )}
-                          </button>
-                        </div>
+                        {/* RPE (Opcional — Divulgação Progressiva) */}
+                        {showRpeColumn && (
+                          <div className="col-span-2 flex justify-center">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setActiveRpePicker({
+                                  workoutExerciseId: workoutEx.id,
+                                  setId: s.id,
+                                  currentRpe: s.rpe ?? null,
+                                })
+                              }
+                              aria-label="Selecionar RPE"
+                              className={`w-11 h-11 rounded-xl flex items-center justify-center text-xs font-bold transition ${
+                                s.completed
+                                  ? 'bg-emerald-500/20 text-slate-900'
+                                  : 'bg-[#F1F5F9] text-slate-500 hover:text-slate-900'
+                              }`}
+                            >
+                              {s.rpe ? (
+                                <span className="text-slate-900 font-bold">
+                                  {s.rpe}
+                                </span>
+                              ) : (
+                                <Gauge className="w-4 h-4 stroke-[1.8]" />
+                              )}
+                            </button>
+                          </div>
+                        )}
 
-                        {/* Checkbox ✓ */}
+                        {/* Checkbox ✓ (w-11 h-11 = 44x44px) */}
                         <div className="col-span-1 flex justify-end">
                           <button
                             type="button"
@@ -1276,10 +1452,10 @@ export function ActiveWorkoutDrawer() {
                             onClick={() =>
                               toggleCompleteSet(workoutEx.id, s.id)
                             }
-                            className={`w-9 h-9 rounded-xl flex items-center justify-center transition ${
+                            className={`w-11 h-11 min-w-[44px] rounded-xl flex items-center justify-center transition ${
                               s.completed
-                                ? 'bg-[#22C55E] text-white shadow-sm'
-                                : 'bg-[#F1F5F9] text-slate-400 hover:text-slate-700'
+                                ? 'bg-[#059669] text-white shadow-sm'
+                                : 'bg-[#F1F5F9] text-slate-500 hover:text-slate-900'
                             }`}
                           >
                             <Check className="w-5 h-5 stroke-[2.5]" />
@@ -1290,12 +1466,12 @@ export function ActiveWorkoutDrawer() {
                   })}
                 </div>
 
-                {/* Botão Largo [+ Adicionar série] */}
+                {/* Botão Largo [+ Adicionar série] (h-11) */}
                 <div className="px-4 pt-1">
                   <button
                     type="button"
                     onClick={() => addSetToActiveExercise(workoutEx.id)}
-                    className="w-full py-2.5 rounded-xl bg-[#F1F5F9] hover:bg-slate-200 text-slate-900 font-medium text-[15px] flex items-center justify-center gap-2 transition"
+                    className="w-full h-11 rounded-xl bg-[#F1F5F9] hover:bg-slate-200 text-slate-900 font-semibold text-[15px] flex items-center justify-center gap-2 transition"
                   >
                     <Plus className="w-4 h-4 stroke-[2.2]" />
                     <span>Adicionar série</span>
@@ -1311,7 +1487,7 @@ export function ActiveWorkoutDrawer() {
           <button
             type="button"
             onClick={() => setShowExercisePicker({ mode: 'add' })}
-            className="w-full py-3.5 rounded-2xl bg-[#0084FF] hover:bg-blue-600 text-white font-bold text-[15px] flex items-center justify-center gap-2 shadow-sm transition"
+            className="w-full h-12 rounded-2xl bg-[#2563EB] hover:bg-blue-600 text-white font-bold text-[15px] flex items-center justify-center gap-2 shadow-sm transition"
           >
             <Plus className="w-5 h-5" /> Adicionar Exercício
           </button>
@@ -1326,7 +1502,7 @@ export function ActiveWorkoutDrawer() {
                 discardActiveWorkout();
               }
             }}
-            className="w-full py-3 rounded-2xl bg-red-50 hover:bg-red-100 text-red-600 font-semibold text-sm flex items-center justify-center gap-2 transition"
+            className="w-full h-11 rounded-2xl bg-red-50 hover:bg-red-100 text-red-600 font-semibold text-sm flex items-center justify-center gap-2 transition"
           >
             <Trash2 className="w-4 h-4" />{' '}
             {isEditingSession ? 'Cancelar Edição' : 'Descartar Treino'}
@@ -1334,58 +1510,376 @@ export function ActiveWorkoutDrawer() {
         </div>
       </div>
 
-      {/* ================= BARRA INFERIOR DO TIMER DE DESCANSO (Idêntica à Imagem 2) ================= */}
-      {restTimer.isActive && !menuWorkoutExerciseId && !showReorderSheet && !activeRpePicker && (
-        <div className="fixed bottom-0 inset-x-0 z-50 bg-white shadow-[0_-8px_24px_rgba(0,0,0,0.08)] pb-[env(safe-area-inset-bottom)]">
-          {/* Linha de progresso azul no topo da barra do timer */}
-          <div className="w-full h-1 bg-slate-200 overflow-hidden">
-            <div
-              className="h-full bg-[#0084FF] transition-all duration-500"
-              style={{
-                width: `${Math.min(
-                  100,
-                  (restTimer.remainingSeconds /
-                    Math.max(1, restTimer.totalSeconds)) *
-                    100
-                )}%`,
-              }}
-            />
-          </div>
-
-          <div className="px-4 py-3 flex items-center justify-between gap-3 max-w-3xl mx-auto">
-            <button
-              type="button"
-              onClick={() => adjustRestTimer(-15)}
-              className="px-5 py-2.5 rounded-xl bg-[#F1F5F9] hover:bg-slate-200 text-slate-900 font-semibold text-[15px] transition"
-            >
-              -15
-            </button>
-
-            <div className="text-3xl font-bold text-slate-900 tracking-tight font-sans">
-              {formatTimerClock(restTimer.remainingSeconds)}
+      {/* ================= BARRA INFERIOR DO TIMER DE DESCANSO ================= */}
+      {restTimer.isActive &&
+        !menuWorkoutExerciseId &&
+        !showReorderSheet &&
+        !activeRpePicker &&
+        !activeSetSheet &&
+        !plateCalcModal && (
+          <div className="fixed bottom-0 inset-x-0 z-50 bg-white border-t border-slate-200 shadow-[0_-8px_24px_rgba(0,0,0,0.2)] pb-[env(safe-area-inset-bottom)]">
+            <div className="w-full h-1 bg-slate-200 overflow-hidden">
+              <div
+                className="h-full bg-[#3B82F6] transition-all duration-500"
+                style={{
+                  width: `${Math.min(
+                    100,
+                    (restTimer.remainingSeconds /
+                      Math.max(1, restTimer.totalSeconds)) *
+                      100
+                  )}%`,
+                }}
+              />
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="px-4 py-3 flex items-center justify-between gap-3 max-w-3xl mx-auto">
               <button
                 type="button"
-                onClick={() => adjustRestTimer(15)}
-                className="px-5 py-2.5 rounded-xl bg-[#F1F5F9] hover:bg-slate-200 text-slate-900 font-semibold text-[15px] transition"
+                onClick={() => adjustRestTimer(-15)}
+                className="h-11 px-5 rounded-xl bg-[#F1F5F9] hover:bg-slate-200 text-slate-900 font-semibold text-[15px] transition"
               >
-                +15
+                -15s
               </button>
+
+              <div className="text-3xl font-bold text-slate-900 tracking-tight font-sans tabular-nums">
+                {formatTimerClock(restTimer.remainingSeconds)}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => adjustRestTimer(15)}
+                  className="h-11 px-5 rounded-xl bg-[#F1F5F9] hover:bg-slate-200 text-slate-900 font-semibold text-[15px] transition"
+                >
+                  +15s
+                </button>
+                <button
+                  type="button"
+                  onClick={stopRestTimer}
+                  className="h-11 px-5 rounded-xl bg-[#2563EB] hover:bg-blue-600 text-white font-semibold text-[15px] transition"
+                >
+                  Pular
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      {/* ================= BOTTOM SHEET DE SÉRIE (Tipo + Aquecimento + Excluir) ================= */}
+      {activeSetSheet && (
+        <div
+          onClick={() => setActiveSetSheet(null)}
+          className="fixed inset-0 z-[70] bg-black/60 flex flex-col justify-end animate-fadeIn"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-t-3xl pt-3 pb-[max(1.75rem,env(safe-area-inset-bottom))] px-4 space-y-4 shadow-2xl max-h-[85vh] overflow-y-auto"
+          >
+            <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto" />
+
+            <div className="flex items-center justify-between px-1">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">
+                  Configurar Série ({activeSetSheet.setNumberLabel})
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Escolha o tipo da série, gere aquecimento ou exclua a linha
+                </p>
+              </div>
               <button
                 type="button"
-                onClick={stopRestTimer}
-                className="px-5 py-2.5 rounded-xl bg-[#0084FF] hover:bg-blue-600 text-white font-semibold text-[15px] transition"
+                onClick={() => setActiveSetSheet(null)}
+                className="w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center text-slate-600"
+                aria-label="Fechar opções da série"
               >
-                Pular
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {(
+                [
+                  {
+                    type: 'normal' as SetType,
+                    badge: '1',
+                    badgeClass: 'bg-[#F1F5F9] text-slate-900',
+                    title: 'Normal',
+                    desc: 'Série principal de trabalho (conta no volume e PRs)',
+                  },
+                  {
+                    type: 'warmup' as SetType,
+                    badge: 'W',
+                    badgeClass: 'bg-amber-100 text-amber-700',
+                    title: 'W — Aquecimento (não conta em PRs)',
+                    desc: 'Prepara articulações e músculos sem contar em recordes',
+                  },
+                  {
+                    type: 'dropset' as SetType,
+                    badge: 'D',
+                    badgeClass: 'bg-purple-100 text-purple-700',
+                    title: 'D — Drop-set',
+                    desc: 'Redução imediata de carga sem descanso após a série anterior',
+                  },
+                  {
+                    type: 'failure' as SetType,
+                    badge: 'F',
+                    badgeClass: 'bg-red-100 text-red-600',
+                    title: 'F — Até a Falha',
+                    desc: 'Série levada até a falha concêntrica máxima',
+                  },
+                ] as const
+              ).map((item) => {
+                const isSelected = activeSetSheet.currentType === item.type;
+                return (
+                  <button
+                    key={item.type}
+                    type="button"
+                    onClick={() => {
+                      updateActiveSet(
+                        activeSetSheet.workoutExerciseId,
+                        activeSetSheet.setId,
+                        { type: item.type }
+                      );
+                      setActiveSetSheet(null);
+                    }}
+                    className={`w-full min-h-[54px] p-3 rounded-2xl border text-left flex items-center gap-3.5 transition ${
+                      isSelected
+                        ? 'border-[#3B82F6] bg-blue-50'
+                        : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span
+                      className={`w-10 h-10 rounded-xl font-bold text-sm flex items-center justify-center shrink-0 ${item.badgeClass}`}
+                    >
+                      {item.badge}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-slate-900">
+                        {item.title}
+                      </p>
+                      <p className="text-xs text-slate-500">{item.desc}</p>
+                    </div>
+                    {isSelected && (
+                      <Check className="w-5 h-5 text-[#3B82F6] shrink-0" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  generateWarmupSetsForActiveExercise(
+                    activeSetSheet.workoutExerciseId
+                  );
+                  setActiveSetSheet(null);
+                }}
+                className="min-h-[48px] px-4 py-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-700 font-bold text-sm flex items-center justify-center gap-2 transition"
+              >
+                <Flame className="w-4 h-4 shrink-0" />
+                <span>🔥 Gerar Séries de Aquecimento (50% e 75%)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  removeSetFromActiveExercise(
+                    activeSetSheet.workoutExerciseId,
+                    activeSetSheet.setId
+                  );
+                  setActiveSetSheet(null);
+                }}
+                className="min-h-[48px] px-4 py-3 rounded-2xl bg-red-50 border border-red-200 text-red-600 font-bold text-sm flex items-center justify-center gap-2 transition"
+              >
+                <Trash2 className="w-4 h-4 shrink-0" />
+                <span>🗑 Excluir Série</span>
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ================= BOTTOM SHEET DO MENU (⋮) (Idêntico à Imagem 1) ================= */}
+      {/* ================= MODAL / SHEET CALCULADORA DE ANILHAS POR LADO ================= */}
+      {plateCalcModal &&
+        (() => {
+          const breakdown = calculatePlatesPerSide(
+            plateCalcModal.totalWeightKg,
+            plateCalcModal.barWeightKg
+          );
+          return (
+            <div
+              onClick={() => setPlateCalcModal(null)}
+              className="fixed inset-0 z-[70] bg-black/60 flex flex-col justify-end sm:justify-center items-center sm:p-4 animate-fadeIn"
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md p-5 space-y-4 shadow-2xl"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#3B82F6] block">
+                      🧮 Calculadora de Anilhas
+                    </span>
+                    <h3 className="text-base font-extrabold text-slate-900">
+                      {plateCalcModal.exerciseTitle}
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPlateCalcModal(null)}
+                    aria-label="Fechar calculadora de anilhas"
+                    className="w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center text-slate-600"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">
+                      Carga Total (kg)
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPlateCalcModal({
+                            ...plateCalcModal,
+                            totalWeightKg: Math.max(
+                              plateCalcModal.barWeightKg,
+                              plateCalcModal.totalWeightKg - 2.5
+                            ),
+                          })
+                        }
+                        className="w-11 h-11 rounded-xl bg-slate-100 font-bold text-sm text-slate-900 shrink-0"
+                      >
+                        -2,5
+                      </button>
+                      <DecimalInput
+                        value={plateCalcModal.totalWeightKg}
+                        ariaLabel="Carga total na barra (kg)"
+                        onChange={(val) =>
+                          setPlateCalcModal({
+                            ...plateCalcModal,
+                            totalWeightKg: val ?? 0,
+                          })
+                        }
+                        className="w-full h-11 text-center rounded-xl bg-slate-100 border border-slate-200 font-extrabold text-slate-900"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPlateCalcModal({
+                            ...plateCalcModal,
+                            totalWeightKg: plateCalcModal.totalWeightKg + 2.5,
+                          })
+                        }
+                        className="w-11 h-11 rounded-xl bg-slate-100 font-bold text-sm text-slate-900 shrink-0"
+                      >
+                        +2,5
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">
+                      Peso da Barra
+                    </label>
+                    <select
+                      value={plateCalcModal.barWeightKg}
+                      onChange={(e) => {
+                        const nextBar = Number(e.target.value);
+                        setPlateCalcModal({
+                          ...plateCalcModal,
+                          barWeightKg: nextBar,
+                        });
+                        updateSettings({
+                          defaultBarWeightKg: nextBar,
+                          barbellWeightKg: nextBar,
+                        });
+                      }}
+                      className="w-full h-11 px-3 rounded-xl bg-slate-100 border border-slate-200 font-bold text-slate-900"
+                    >
+                      <option value={20}>Barra Olímpica (20 kg)</option>
+                      <option value={15}>Barra Feminina (15 kg)</option>
+                      <option value={10}>Barra Curta / W (10 kg)</option>
+                      <option value={0}>Máquina / Sem Barra (0 kg)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-600">
+                      Montar em <strong>CADA LADO</strong> da barra:
+                    </span>
+                    <span className="text-lg font-extrabold text-[#3B82F6] tabular-nums">
+                      {formatPtBrNumber(breakdown.achievedPerSideKg)} kg / lado
+                    </span>
+                  </div>
+
+                  {breakdown.platesPerSide.length === 0 ? (
+                    <p className="text-xs text-slate-500 py-2 text-center">
+                      Apenas a barra ({plateCalcModal.barWeightKg} kg) — sem
+                      anilhas adicionais.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        {breakdown.platesPerSide.map((p) => (
+                          <div
+                            key={p.weight}
+                            className="px-3 py-2 rounded-xl bg-white border border-slate-200 flex items-center gap-2 shadow-2xs"
+                          >
+                            <span
+                              className="w-3.5 h-3.5 rounded-full shrink-0 border border-black/15"
+                              style={{ backgroundColor: p.color }}
+                            />
+                            <span className="text-sm font-extrabold text-slate-900 tabular-nums">
+                              {p.count}× {formatPtBrNumber(p.weight)} kg
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        Total montado:{' '}
+                        <strong>
+                          {formatPtBrNumber(breakdown.achievedTotalKg)} kg
+                        </strong>{' '}
+                        (Barra {plateCalcModal.barWeightKg} kg +{' '}
+                        {formatPtBrNumber(breakdown.achievedPerSideKg)} kg × 2)
+                      </p>
+                    </>
+                  )}
+                </div>
+
+                {plateCalcModal.setId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (plateCalcModal.setId) {
+                        updateActiveSet(
+                          plateCalcModal.workoutExerciseId,
+                          plateCalcModal.setId,
+                          { weightKg: breakdown.achievedTotalKg }
+                        );
+                      }
+                      setPlateCalcModal(null);
+                    }}
+                    className="w-full h-11 rounded-xl bg-[#2563EB] hover:bg-blue-600 text-white font-bold text-sm transition"
+                  >
+                    Usar {formatPtBrNumber(breakdown.achievedTotalKg)} kg na
+                    série atual
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+      {/* ================= BOTTOM SHEET DO MENU (⋮) ================= */}
       {menuWorkoutExerciseId && (
         <div
           onClick={() => setMenuWorkoutExerciseId(null)}
@@ -1399,6 +1893,70 @@ export function ActiveWorkoutDrawer() {
             <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto" />
 
             <div className="bg-white rounded-2xl divide-y divide-slate-100 overflow-hidden shadow-sm border border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  generateWarmupSetsForActiveExercise(menuWorkoutExerciseId);
+                  setMenuWorkoutExerciseId(null);
+                }}
+                className="w-full px-5 py-4 text-left flex items-center gap-4 hover:bg-slate-50 transition"
+              >
+                <Flame className="w-5 h-5 text-amber-500" />
+                <span className="text-[16px] font-medium text-slate-900">
+                  🔥 Gerar 2 séries de aquecimento (50% e 75%)
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const targetEx = activeWorkout.exercises.find(
+                    (e) => e.id === menuWorkoutExerciseId
+                  );
+                  const meta = targetEx
+                    ? exerciseMap.get(targetEx.exerciseId)
+                    : undefined;
+                  const targetSet =
+                    targetEx?.sets.find((st) => !st.completed) ||
+                    targetEx?.sets[0];
+                  setMenuWorkoutExerciseId(null);
+                  if (targetEx) {
+                    setPlateCalcModal({
+                      workoutExerciseId: targetEx.id,
+                      setId: targetSet?.id,
+                      exerciseTitle: meta?.title || 'Exercício',
+                      totalWeightKg: targetSet?.weightKg || 60,
+                      barWeightKg:
+                        settings.barbellWeightKg ??
+                        settings.defaultBarWeightKg ??
+                        20,
+                    });
+                  }
+                }}
+                className="w-full px-5 py-4 text-left flex items-center gap-4 hover:bg-slate-50 transition"
+              >
+                <Calculator className="w-5 h-5 text-[#3B82F6]" />
+                <span className="text-[16px] font-medium text-slate-900">
+                  🧮 Calculadora de anilhas por lado
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  updateSettings({ showRpeColumn: !showRpeColumn });
+                  setMenuWorkoutExerciseId(null);
+                }}
+                className="w-full px-5 py-4 text-left flex items-center gap-4 hover:bg-slate-50 transition"
+              >
+                <Gauge className="w-5 h-5 text-slate-800" />
+                <span className="text-[16px] font-medium text-slate-900">
+                  {showRpeColumn
+                    ? 'Ocultar coluna RPE na tabela'
+                    : 'Exibir coluna RPE na tabela'}
+                </span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => {
@@ -1487,7 +2045,7 @@ export function ActiveWorkoutDrawer() {
               </h3>
               <button
                 onClick={() => setShowReorderSheet(false)}
-                className="text-sm font-bold text-[#0084FF]"
+                className="min-h-[44px] px-3 text-sm font-bold text-[#0084FF] flex items-center justify-center"
               >
                 Concluído
               </button>
@@ -1503,20 +2061,22 @@ export function ActiveWorkoutDrawer() {
                     <span className="text-sm font-semibold text-slate-800">
                       {idx + 1}. {meta?.title || 'Exercício'}
                     </span>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       <button
                         disabled={idx === 0}
+                        aria-label="Mover exercício para cima"
                         onClick={() => moveExerciseInActiveWorkout(ex.id, 'up')}
-                        className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-xs font-bold disabled:opacity-30"
+                        className="w-11 h-11 rounded-xl bg-white border border-slate-200 text-xs font-bold flex items-center justify-center disabled:opacity-30"
                       >
                         ↑
                       </button>
                       <button
                         disabled={idx === activeWorkout.exercises.length - 1}
+                        aria-label="Mover exercício para baixo"
                         onClick={() =>
                           moveExerciseInActiveWorkout(ex.id, 'down')
                         }
-                        className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-xs font-bold disabled:opacity-30"
+                        className="w-11 h-11 rounded-xl bg-white border border-slate-200 text-xs font-bold flex items-center justify-center disabled:opacity-30"
                       >
                         ↓
                       </button>
@@ -1561,7 +2121,7 @@ export function ActiveWorkoutDrawer() {
                     );
                     setActiveRpePicker(null);
                   }}
-                  className={`py-3 rounded-xl font-bold text-sm border transition ${
+                  className={`min-h-[44px] py-3 rounded-xl font-bold text-sm border transition ${
                     activeRpePicker.currentRpe === val
                       ? 'bg-[#0084FF] text-white border-[#0084FF]'
                       : 'bg-slate-50 text-slate-800 border-slate-200 hover:bg-slate-100'
@@ -1587,7 +2147,8 @@ export function ActiveWorkoutDrawer() {
               </h3>
               <button
                 onClick={() => setShowExercisePicker(null)}
-                className="p-1 text-slate-400 hover:text-slate-700"
+                aria-label="Fechar seletor de exercícios"
+                className="w-11 h-11 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1602,9 +2163,19 @@ export function ActiveWorkoutDrawer() {
                   value={pickerSearch}
                   onChange={(e) => setPickerSearch(e.target.value)}
                   placeholder="Buscar exercício..."
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-100 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0084FF]"
+                  className="w-full h-11 pl-10 pr-4 rounded-xl bg-slate-100 text-base text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0084FF]"
                 />
               </div>
+
+              {isPickerOffline && (
+                <div className="px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold flex items-center gap-2">
+                  <WifiOff className="w-4 h-4 shrink-0 text-amber-500" />
+                  <span>
+                    Modo Offline: exibindo exercícios do catálogo local salvo no
+                    aparelho.
+                  </span>
+                </div>
+              )}
 
               {pickerSearch.trim().length > 0 && (
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
@@ -1617,7 +2188,7 @@ export function ActiveWorkoutDrawer() {
                       onChange={(e) =>
                         setQuickExMuscle(e.target.value as MuscleGroup)
                       }
-                      className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-800"
+                      className="h-11 px-2.5 rounded-lg bg-white border border-slate-200 text-base text-slate-800"
                     >
                       {MUSCLE_OPTIONS.map((m) => (
                         <option key={m} value={m}>
@@ -1630,7 +2201,7 @@ export function ActiveWorkoutDrawer() {
                       onChange={(e) =>
                         setQuickExEquip(e.target.value as EquipmentType)
                       }
-                      className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-800"
+                      className="h-11 px-2.5 rounded-lg bg-white border border-slate-200 text-base text-slate-800"
                     >
                       {EQUIPMENT_OPTIONS.map((eq) => (
                         <option key={eq} value={eq}>
@@ -1664,7 +2235,7 @@ export function ActiveWorkoutDrawer() {
                       setShowExercisePicker(null);
                       setPickerSearch('');
                     }}
-                    className="w-full py-2 rounded-lg bg-[#0084FF] text-white text-xs font-bold flex items-center justify-center gap-1.5"
+                    className="w-full h-11 rounded-lg bg-[#0084FF] text-white text-xs font-bold flex items-center justify-center gap-1.5"
                   >
                     <Plus className="w-4 h-4" /> Criar e Adicionar
                   </button>
@@ -1732,60 +2303,134 @@ export function ActiveWorkoutDrawer() {
       )}
 
       {/* ================= MODAL DE CONFIRMAÇÃO AO CONCLUIR ================= */}
-      {showFinishModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md p-6 space-y-5 shadow-2xl">
-            <h3 className="text-lg font-extrabold text-slate-900">
-              Concluir Treino?
-            </h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Você completou <strong>{liveStats.completedSets} séries</strong>{' '}
-              com um volume total de{' '}
-              <strong>{liveStats.volumeKg.toLocaleString('pt-BR')} kg</strong>.
-            </p>
+      {showFinishModal &&
+        (() => {
+          const unmarkedFilledSetsCount = activeWorkout.exercises.reduce(
+            (acc, ex) =>
+              acc +
+              ex.sets.filter(
+                (s) =>
+                  !s.completed &&
+                  (((s.weightKg ?? 0) > 0 && (s.reps ?? 0) > 0) ||
+                    (s.durationSeconds ?? 0) > 0)
+              ).length,
+            0
+          );
 
-            {activeWorkout.routineId ? (
-              <div className="space-y-2.5 pt-2">
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-3xl w-full max-w-md p-6 space-y-5 shadow-2xl">
+                <h3 className="text-lg font-extrabold text-slate-900">
+                  Concluir Treino?
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Você marcou{' '}
+                  <strong>{liveStats.completedSets} séries concluídas</strong>{' '}
+                  com um volume total de{' '}
+                  <strong>
+                    {liveStats.volumeKg.toLocaleString('pt-BR')} kg
+                  </strong>
+                  .
+                </p>
+
+                {unmarkedFilledSetsCount > 0 && (
+                  <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 space-y-1.5">
+                    <div className="flex items-center gap-2 font-extrabold text-xs">
+                      <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
+                      <span>
+                        {unmarkedFilledSetsCount}{' '}
+                        {unmarkedFilledSetsCount === 1
+                          ? 'série preenchida não marcada!'
+                          : 'séries preenchidas não marcadas!'}
+                      </span>
+                    </div>
+                    <p className="text-xs leading-relaxed">
+                      Encontramos {unmarkedFilledSetsCount}{' '}
+                      {unmarkedFilledSetsCount === 1 ? 'série' : 'séries'} com
+                      peso e repetições digitados sem o check <strong>✓</strong>
+                      . Deseja marcá-las automaticamente para não perder seu
+                      registro?
+                    </p>
+                  </div>
+                )}
+
+                <div className="space-y-2.5 pt-1">
+                  {unmarkedFilledSetsCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowFinishModal(false);
+                        finishActiveWorkout(
+                          Boolean(activeWorkout.routineId),
+                          true
+                        );
+                      }}
+                      className="w-full min-h-[48px] py-3 px-4 rounded-xl bg-[#059669] hover:bg-emerald-600 text-white font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm transition"
+                    >
+                      <Check className="w-4 h-4 stroke-[2.5] shrink-0" />
+                      <span>
+                        ✓ Marcar todas as {unmarkedFilledSetsCount} séries
+                        preenchidas e Concluir
+                      </span>
+                    </button>
+                  )}
+
+                  {activeWorkout.routineId ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowFinishModal(false);
+                          finishActiveWorkout(true, false);
+                        }}
+                        className="w-full min-h-[44px] py-3 rounded-xl bg-[#2563EB] hover:bg-blue-600 text-white font-bold text-xs sm:text-sm transition"
+                      >
+                        {unmarkedFilledSetsCount > 0
+                          ? `Concluir apenas com as marcadas (${liveStats.completedSets}) e Atualizar Rotina`
+                          : 'Concluir e Atualizar Rotina'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowFinishModal(false);
+                          finishActiveWorkout(false, false);
+                        }}
+                        className="w-full min-h-[44px] py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs sm:text-sm transition"
+                      >
+                        Concluir (Manter Rotina Original)
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowFinishModal(false);
+                        finishActiveWorkout(false, false);
+                      }}
+                      className={`w-full min-h-[44px] py-3 rounded-xl font-bold text-sm transition ${
+                        unmarkedFilledSetsCount > 0
+                          ? 'bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs sm:text-sm'
+                          : 'bg-[#2563EB] hover:bg-blue-600 text-white'
+                      }`}
+                    >
+                      {unmarkedFilledSetsCount > 0
+                        ? `Concluir apenas com as séries marcadas (${liveStats.completedSets})`
+                        : 'Confirmar e Salvar Treino'}
+                    </button>
+                  )}
+                </div>
+
                 <button
-                  onClick={() => {
-                    setShowFinishModal(false);
-                    finishActiveWorkout(true);
-                  }}
-                  className="w-full py-3 rounded-xl bg-[#0084FF] hover:bg-blue-600 text-white font-bold text-xs sm:text-sm transition"
+                  type="button"
+                  onClick={() => setShowFinishModal(false)}
+                  className="w-full min-h-[44px] py-2 text-xs font-semibold text-slate-500 hover:text-slate-800"
                 >
-                  Concluir e Atualizar Rotina
-                </button>
-                <button
-                  onClick={() => {
-                    setShowFinishModal(false);
-                    finishActiveWorkout(false);
-                  }}
-                  className="w-full py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs sm:text-sm transition"
-                >
-                  Concluir (Manter Rotina Original)
+                  Voltar ao Treino
                 </button>
               </div>
-            ) : (
-              <button
-                onClick={() => {
-                  setShowFinishModal(false);
-                  finishActiveWorkout(false);
-                }}
-                className="w-full py-3 rounded-xl bg-[#0084FF] hover:bg-blue-600 text-white font-bold text-sm transition"
-              >
-                Confirmar e Salvar Treino
-              </button>
-            )}
-
-            <button
-              onClick={() => setShowFinishModal(false)}
-              className="w-full py-2 text-xs font-semibold text-slate-400 hover:text-slate-700"
-            >
-              Voltar ao Treino
-            </button>
-          </div>
-        </div>
-      )}
+            </div>
+          );
+        })()}
 
       <ExerciseDetailModal
         exercise={inspectExercise}

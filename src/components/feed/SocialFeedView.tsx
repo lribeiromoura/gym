@@ -105,33 +105,21 @@ export function SocialFeedView() {
                 key={w.id}
                 className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-xs"
               >
-                {/* Topo do Card: Usuário, Data e Ações (Editar, Salvar Rotina, Excluir) */}
+                {/* Topo do Card: Data/Hora + Ações compactas com área de toque >= 44x44px */}
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-[#0084FF] flex items-center justify-center font-extrabold text-sm text-white">
-                      {(settings.name || 'U')
-                        .split(' ')
-                        .map((p) => p[0])
-                        .join('')
-                        .slice(0, 2)
-                        .toUpperCase()}
-                    </div>
-                    <div>
-                      <span className="font-bold text-slate-900 text-sm">
-                        {settings.name || 'Usuário'}
-                      </span>
-                      <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-                        <Calendar className="w-3 h-3" />
-                        {new Date(w.startTime).toLocaleDateString('pt-BR', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </p>
-                    </div>
-                  </div>
+                  <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-[#3B82F6] shrink-0" />
+                    <span>
+                      {new Date(w.startTime).toLocaleDateString('pt-BR', {
+                        weekday: 'short',
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                  </p>
 
                   <div className="flex flex-wrap items-center gap-1.5">
                     <button
@@ -151,16 +139,18 @@ export function SocialFeedView() {
                         setTimeout(() => setSharedSessionId(null), 2500);
                       }}
                       title="Compartilhar Link deste Treino"
-                      className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-xs font-bold text-[#0084FF] flex items-center gap-1.5 transition"
+                      aria-label="Compartilhar treino"
+                      className="h-11 px-3 rounded-xl bg-blue-50 hover:bg-blue-100 text-xs font-bold text-[#3B82F6] flex items-center gap-1.5 transition"
                     >
                       {sharedSessionId === w.id ? (
                         <>
-                          <Check className="w-3.5 h-3.5 text-emerald-600" />{' '}
-                          Link Copiado!
+                          <Check className="w-4 h-4 text-emerald-600" />{' '}
+                          <span>Copiado</span>
                         </>
                       ) : (
                         <>
-                          <Share2 className="w-3.5 h-3.5" /> Compartilhar
+                          <Share2 className="w-4 h-4" />{' '}
+                          <span>Compartilhar</span>
                         </>
                       )}
                     </button>
@@ -168,9 +158,10 @@ export function SocialFeedView() {
                     <button
                       onClick={() => startEditWorkoutSession(w.id)}
                       title="Alterar / Editar este treino"
-                      className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-blue-50 text-xs font-bold text-slate-700 hover:text-[#0084FF] flex items-center gap-1.5 transition"
+                      aria-label="Editar treino"
+                      className="h-11 px-3 rounded-xl bg-slate-100 hover:bg-blue-50 text-xs font-bold text-slate-700 hover:text-[#3B82F6] flex items-center gap-1.5 transition"
                     >
-                      <Edit3 className="w-3.5 h-3.5" /> Editar
+                      <Edit3 className="w-4 h-4" /> Editar
                     </button>
 
                     <button
@@ -180,16 +171,18 @@ export function SocialFeedView() {
                         setTimeout(() => setSavedToastId(null), 2500);
                       }}
                       title="Salvar como Rotina"
-                      className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-blue-50 text-xs font-bold text-slate-700 hover:text-[#0084FF] flex items-center gap-1.5 transition"
+                      aria-label="Salvar como rotina"
+                      className="h-11 px-3 rounded-xl bg-slate-100 hover:bg-blue-50 text-xs font-bold text-slate-700 hover:text-[#3B82F6] flex items-center gap-1.5 transition"
                     >
                       {savedToastId === w.id ? (
                         <>
-                          <Check className="w-3.5 h-3.5 text-emerald-600" />{' '}
-                          Salvo!
+                          <Check className="w-4 h-4 text-emerald-600" />{' '}
+                          <span>Salvo!</span>
                         </>
                       ) : (
                         <>
-                          <BookmarkPlus className="w-3.5 h-3.5" /> Virar Rotina
+                          <BookmarkPlus className="w-4 h-4" />{' '}
+                          <span>Virar Rotina</span>
                         </>
                       )}
                     </button>
@@ -205,7 +198,8 @@ export function SocialFeedView() {
                         }
                       }}
                       title="Excluir Treino"
-                      className="p-2 rounded-xl bg-slate-100 hover:bg-red-50 text-slate-500 hover:text-red-500 transition"
+                      aria-label="Excluir treino"
+                      className="w-11 h-11 rounded-xl bg-slate-100 hover:bg-red-50 text-slate-500 hover:text-red-500 flex items-center justify-center transition"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -350,7 +344,7 @@ export function SocialFeedView() {
                   <div className="flex items-center justify-between pt-1">
                     <button
                       onClick={() => toggleExpand(w.id)}
-                      className="text-xs font-bold text-[#0084FF] hover:underline"
+                      className="min-h-[44px] px-2 text-xs font-bold text-[#3B82F6] hover:underline flex items-center"
                     >
                       {isExpanded
                         ? 'Ocultar detalhes das séries'
@@ -361,9 +355,9 @@ export function SocialFeedView() {
                       onClick={() =>
                         startWorkoutFromExercises(w.title, w.exercises)
                       }
-                      className="text-xs font-bold text-emerald-600 hover:underline flex items-center gap-1"
+                      className="min-h-[44px] px-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-700 hover:underline flex items-center gap-1.5"
                     >
-                      <Play className="w-3 h-3 fill-current" /> Repetir Treino
+                      <Play className="w-3.5 h-3.5 fill-current" /> Repetir Treino
                     </button>
                   </div>
                 </div>

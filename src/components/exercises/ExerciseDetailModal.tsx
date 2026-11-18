@@ -8,6 +8,7 @@ import {
   Dumbbell,
   History,
   Info,
+  Trash2,
   TrendingUp,
   Trophy,
   X,
@@ -30,6 +31,7 @@ interface ExerciseDetailModalProps {
 export function ExerciseDetailModal({ exercise, onClose }: ExerciseDetailModalProps) {
   const workoutHistory = useWorkoutStore((s) => s.workoutHistory);
   const importExercisesBatch = useWorkoutStore((s) => s.importExercisesBatch);
+  const deleteExercise = useWorkoutStore((s) => s.deleteExercise);
   const [activeTab, setActiveTab] = useState<'summary' | 'history' | 'howto'>(
     'summary'
   );
@@ -173,7 +175,8 @@ export function ExerciseDetailModal({ exercise, onClose }: ExerciseDetailModalPr
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+            aria-label="Fechar detalhes do exercício"
+            className="w-11 h-11 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition"
           >
             <X className="w-5 h-5" />
           </button>
@@ -183,7 +186,7 @@ export function ExerciseDetailModal({ exercise, onClose }: ExerciseDetailModalPr
         <div className="grid grid-cols-3 border-b border-slate-200 bg-slate-50 px-4">
           <button
             onClick={() => setActiveTab('summary')}
-            className={`py-3 text-xs sm:text-sm font-semibold border-b-2 transition flex items-center justify-center gap-1.5 ${
+            className={`min-h-[44px] py-3 text-xs sm:text-sm font-semibold border-b-2 transition flex items-center justify-center gap-1.5 ${
               activeTab === 'summary'
                 ? 'border-[#0084FF] text-[#0084FF]'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -194,7 +197,7 @@ export function ExerciseDetailModal({ exercise, onClose }: ExerciseDetailModalPr
           </button>
           <button
             onClick={() => setActiveTab('history')}
-            className={`py-3 text-xs sm:text-sm font-semibold border-b-2 transition flex items-center justify-center gap-1.5 ${
+            className={`min-h-[44px] py-3 text-xs sm:text-sm font-semibold border-b-2 transition flex items-center justify-center gap-1.5 ${
               activeTab === 'history'
                 ? 'border-[#0084FF] text-[#0084FF]'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -205,7 +208,7 @@ export function ExerciseDetailModal({ exercise, onClose }: ExerciseDetailModalPr
           </button>
           <button
             onClick={() => setActiveTab('howto')}
-            className={`py-3 text-xs sm:text-sm font-semibold border-b-2 transition flex items-center justify-center gap-1.5 ${
+            className={`min-h-[44px] py-3 text-xs sm:text-sm font-semibold border-b-2 transition flex items-center justify-center gap-1.5 ${
               activeTab === 'howto'
                 ? 'border-[#0084FF] text-[#0084FF]'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -587,6 +590,34 @@ export function ExerciseDetailModal({ exercise, onClose }: ExerciseDetailModalPr
               </div>
             </div>
           )}
+        </div>
+
+        {/* Rodapé com ação protegida de Excluir Exercício */}
+        <div className="px-5 py-3.5 border-t border-slate-100 bg-white flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              if (
+                confirm(
+                  `Tem certeza que deseja excluir o exercício "${exercise.title}" da biblioteca?`
+                )
+              ) {
+                deleteExercise(exercise.id);
+                onClose();
+              }
+            }}
+            className="h-11 px-4 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold flex items-center gap-2 transition"
+          >
+            <Trash2 className="w-4 h-4" /> Excluir Exercício
+          </button>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-11 px-5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition"
+          >
+            Fechar
+          </button>
         </div>
       </div>
     </div>

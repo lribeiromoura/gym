@@ -15,8 +15,11 @@ export const INITIAL_USER_SETTINGS: UserSettings = {
   weightUnit: 'kg',
   defaultRestSeconds: 90,
   defaultBarWeightKg: 20,
+  barbellWeightKg: 20,
   soundEnabled: true,
   weeklyWorkoutGoal: 4,
+  theme: 'dark',
+  showRpeColumn: false,
 };
 
 export const INITIAL_EXERCISES: Exercise[] = EXERCISES_SEED;

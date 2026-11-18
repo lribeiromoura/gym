@@ -4,10 +4,8 @@ import './globals.css';
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: 'cover',
-  themeColor: '#FFFFFF',
+  themeColor: '#0B0F17',
 };
 
 export const metadata: Metadata = {
@@ -47,8 +45,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR">
-      <body className="min-h-screen bg-[#F8FAFC] text-slate-900 antialiased selection:bg-[#0084FF]/20">
+    <html lang="pt-BR" className="dark theme-dark">
+      <body className="min-h-screen bg-[#0B0F17] text-[#F8FAFC] antialiased selection:bg-[#3B82F6]/30">
         {children}
       </body>
     </html>

@@ -11,8 +11,8 @@ import {
   Plus,
   Search,
   Sparkles,
-  Trash2,
   Trophy,
+  WifiOff,
   X,
 } from 'lucide-react';
 import {
@@ -25,7 +25,10 @@ import {
 } from '@/types/workout';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import { getExerciseRecords } from '@/lib/calculations';
-import { fetchExerciseDBCatalog, searchExerciseDB } from '@/lib/exercisedb';
+import {
+  fetchExerciseDBCatalog,
+  searchExerciseDBWithStatus,
+} from '@/lib/exercisedb';
 import { ExerciseDetailModal } from './ExerciseDetailModal';
 
 const MUSCLE_OPTIONS = Object.keys(MUSCLE_LABELS) as MuscleGroup[];
@@ -40,7 +43,6 @@ export function ExercisesView() {
   );
   const addCustomExercise = useWorkoutStore((s) => s.addCustomExercise);
   const importExercisesBatch = useWorkoutStore((s) => s.importExercisesBatch);
-  const deleteExercise = useWorkoutStore((s) => s.deleteExercise);
 
   const [search, setSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState<MuscleGroup | 'all'>(
@@ -55,9 +57,25 @@ export function ExercisesView() {
   const [showCustomModal, setShowCustomModal] = useState(false);
 
   const [isSearchingApi, setIsSearchingApi] = useState(false);
+  const [isOfflineSearch, setIsOfflineSearch] = useState(false);
   const [isSyncingCatalog, setIsSyncingCatalog] = useState(false);
   const [catalogOffset, setCatalogOffset] = useState(0);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    const updateOnlineStatus = () => {
+      setIsOfflineSearch(!navigator.onLine);
+    };
+    if (typeof window !== 'undefined') {
+      updateOnlineStatus();
+      window.addEventListener('online', updateOnlineStatus);
+      window.addEventListener('offline', updateOnlineStatus);
+      return () => {
+        window.removeEventListener('online', updateOnlineStatus);
+        window.removeEventListener('offline', updateOnlineStatus);
+      };
+    }
+  }, []);
 
   // Busca automática na API ExerciseDB (traduzindo pt-BR <-> EN) ao digitar na busca
   useEffect(() => {
@@ -70,8 +88,10 @@ export function ExercisesView() {
     let cancelled = false;
     setIsSearchingApi(true);
     const timer = setTimeout(async () => {
-      const results = await searchExerciseDB(q);
+      const { exercises: results, isOffline } =
+        await searchExerciseDBWithStatus(q);
       if (!cancelled) {
+        setIsOfflineSearch(isOffline);
         if (results.length > 0) {
           importExercisesBatch(results);
         }
@@ -184,7 +204,7 @@ export function ExercisesView() {
             type="button"
             onClick={handleSyncFromExerciseDB}
             disabled={isSyncingCatalog}
-            className="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-full bg-blue-50 hover:bg-blue-100 text-[#0084FF] font-bold text-xs sm:text-sm border border-blue-200 transition disabled:opacity-60"
+            className="h-11 inline-flex items-center justify-center gap-2 px-3.5 rounded-full bg-blue-50 hover:bg-blue-100 text-[#0084FF] font-bold text-xs sm:text-sm border border-blue-200 transition disabled:opacity-60"
           >
             {isSyncingCatalog ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -196,7 +216,7 @@ export function ExercisesView() {
           <button
             type="button"
             onClick={() => setShowCustomModal(true)}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full bg-[#0084FF] hover:bg-blue-600 text-white font-bold text-xs sm:text-sm shadow-sm transition"
+            className="h-11 inline-flex items-center justify-center gap-2 px-4 rounded-full bg-[#0084FF] hover:bg-blue-600 text-white font-bold text-xs sm:text-sm shadow-sm transition"
           >
             <Plus className="w-4 h-4" />
             Novo Exercício
@@ -220,22 +240,33 @@ export function ExercisesView() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar exercício em português ou inglês (busca também na ExerciseDB)..."
-            className="w-full pl-10 pr-16 py-2.5 rounded-xl bg-[#F1F5F9] text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0084FF]"
+            className="w-full h-11 pl-10 pr-16 rounded-xl bg-[#F1F5F9] text-base text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0084FF]"
           />
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+          <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
             {isSearchingApi && (
-              <Loader2 className="w-4 h-4 text-[#0084FF] animate-spin" />
+              <Loader2 className="w-4 h-4 text-[#3B82F6] animate-spin" />
             )}
             {search && (
               <button
                 onClick={() => setSearch('')}
-                className="text-slate-400 hover:text-slate-700"
+                aria-label="Limpar busca"
+                className="w-11 h-11 flex items-center justify-center text-slate-400 hover:text-slate-700"
               >
                 <X className="w-4 h-4" />
               </button>
             )}
           </div>
         </div>
+
+        {isOfflineSearch && (
+          <div className="px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold flex items-center gap-2">
+            <WifiOff className="w-4 h-4 shrink-0 text-amber-500" />
+            <span>
+              Modo Offline: exibindo resultados do catálogo local salvo no
+              aparelho (ExerciseDB online indisponível).
+            </span>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
@@ -247,7 +278,7 @@ export function ExercisesView() {
               onChange={(e) =>
                 setSelectedMuscle(e.target.value as MuscleGroup | 'all')
               }
-              className="w-full px-3 py-2 rounded-xl bg-[#F1F5F9] border border-slate-200 text-xs sm:text-sm text-slate-800 font-medium focus:outline-none focus:border-[#0084FF]"
+              className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-800 font-medium focus:outline-none focus:border-[#0084FF]"
             >
               <option value="all">Todos os Músculos</option>
               {MUSCLE_OPTIONS.map((m) => (
@@ -267,7 +298,7 @@ export function ExercisesView() {
               onChange={(e) =>
                 setSelectedEquipment(e.target.value as EquipmentType | 'all')
               }
-              className="w-full px-3 py-2 rounded-xl bg-[#F1F5F9] border border-slate-200 text-xs sm:text-sm text-slate-800 font-medium focus:outline-none focus:border-[#0084FF]"
+              className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-800 font-medium focus:outline-none focus:border-[#0084FF]"
             >
               <option value="all">Todos os Equipamentos</option>
               {EQUIPMENT_OPTIONS.map((eq) => (
@@ -350,7 +381,7 @@ export function ExercisesView() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
                   {activeWorkout && (
                     <button
                       onClick={(e) => {
@@ -358,22 +389,12 @@ export function ExercisesView() {
                         addExerciseToActiveWorkout(ex.id);
                       }}
                       title="Adicionar ao Treino Ativo"
-                      className="px-2.5 py-1.5 rounded-full bg-blue-50 hover:bg-[#0084FF] text-[#0084FF] hover:text-white text-xs font-bold transition"
+                      className="h-11 px-3.5 rounded-xl bg-blue-50 hover:bg-[#2563EB] text-[#3B82F6] hover:text-white text-xs font-bold flex items-center justify-center transition"
                     >
                       + Treino
                     </button>
                   )}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteExercise(ex.id);
-                    }}
-                    title="Excluir Exercício"
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 transition"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-700 transition" />
+                  <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-slate-900 transition" />
                 </div>
               </div>
             );
@@ -418,7 +439,7 @@ export function ExercisesView() {
                   value={customTitle}
                   onChange={(e) => setCustomTitle(e.target.value)}
                   placeholder="Ex: Supino Reto (Barra)"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F1F5F9] border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-[#0084FF]"
+                  className="w-full h-11 px-3.5 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900 focus:outline-none focus:border-[#0084FF]"
                 />
               </div>
 

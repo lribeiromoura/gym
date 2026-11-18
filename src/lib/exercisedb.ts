@@ -901,26 +901,46 @@ export function translatePtQueryToEn(query: string): string {
 }
 
 /**
- * Busca exercícios na API ExerciseDB (suporta busca em Português ou Inglês)
+ * Busca exercícios na API ExerciseDB retornando status de conectividade (offline/erro de rede)
  */
-export async function searchExerciseDB(query: string): Promise<Exercise[]> {
+export async function searchExerciseDBWithStatus(
+  query: string
+): Promise<{ exercises: Exercise[]; isOffline: boolean }> {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return { exercises: [], isOffline: true };
+  }
   const enQuery = translatePtQueryToEn(query);
-  if (!enQuery || enQuery.length < 2) return [];
+  if (!enQuery || enQuery.length < 2) {
+    return { exercises: [], isOffline: false };
+  }
 
   try {
     const res = await fetch(
       `${API_BASE}/exercises/search?search=${encodeURIComponent(enQuery)}`
     );
-    if (!res.ok) return [];
+    if (!res.ok) return { exercises: [], isOffline: true };
     const json = await res.json();
-    if (!json?.success || !Array.isArray(json.data)) return [];
+    if (!json?.success || !Array.isArray(json.data)) {
+      return { exercises: [], isOffline: false };
+    }
 
-    return json.data.map((item: ExerciseDBRawItem) =>
-      convertExerciseDBItem(item)
-    );
+    return {
+      exercises: json.data.map((item: ExerciseDBRawItem) =>
+        convertExerciseDBItem(item)
+      ),
+      isOffline: false,
+    };
   } catch {
-    return [];
+    return { exercises: [], isOffline: true };
   }
+}
+
+/**
+ * Busca exercícios na API ExerciseDB (suporta busca em Português ou Inglês)
+ */
+export async function searchExerciseDB(query: string): Promise<Exercise[]> {
+  const { exercises } = await searchExerciseDBWithStatus(query);
+  return exercises;
 }
 
 /**

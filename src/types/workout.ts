@@ -154,8 +154,11 @@ export interface UserSettings {
   weightUnit: 'kg' | 'lbs';
   defaultRestSeconds: number;
   defaultBarWeightKg: number;
+  barbellWeightKg?: number;
   soundEnabled: boolean;
   weeklyWorkoutGoal: number;
+  theme: 'dark' | 'light';
+  showRpeColumn: boolean;
 }
 
 export const MUSCLE_LABELS: Record<MuscleGroup, string> = {

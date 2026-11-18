@@ -239,6 +239,117 @@ export function calculatePlates(
   };
 }
 
+const PLATE_COLOR_MAP: Record<number, string> = {
+  25: '#EF4444',
+  20: '#2563EB',
+  15: '#EAB308',
+  10: '#16A34A',
+  5: '#F8FAFC',
+  2.5: '#94A3B8',
+  1.25: '#64748B',
+};
+
+export interface PlatesPerSideBreakdown {
+  totalWeightKg: number;
+  barWeightKg: number;
+  weightPerSideKg: number;
+  achievedTotalKg: number;
+  achievedPerSideKg: number;
+  remainderPerSideKg: number;
+  platesPerSide: { weight: number; count: number; color: string }[];
+  flatPlates: number[];
+}
+
+export function calculatePlatesPerSide(
+  totalWeightKg: number,
+  barWeightKg: number = 20,
+  availablePlates: number[] = [25, 20, 15, 10, 5, 2.5, 1.25]
+): PlatesPerSideBreakdown {
+  const safeTotal = Number.isFinite(totalWeightKg) ? Math.max(0, totalWeightKg) : 0;
+  const safeBar = Number.isFinite(barWeightKg) ? Math.max(0, barWeightKg) : 20;
+
+  if (safeTotal <= safeBar) {
+    return {
+      totalWeightKg: safeTotal,
+      barWeightKg: safeBar,
+      weightPerSideKg: 0,
+      achievedTotalKg: safeBar,
+      achievedPerSideKg: 0,
+      remainderPerSideKg: 0,
+      platesPerSide: [],
+      flatPlates: [],
+    };
+  }
+
+  const weightPerSideKg = Math.round(((safeTotal - safeBar) / 2) * 100) / 100;
+  let remaining = weightPerSideKg;
+  const sortedPlates = [...availablePlates]
+    .filter((p) => Number.isFinite(p) && p > 0)
+    .sort((a, b) => b - a);
+
+  const platesPerSide: { weight: number; count: number; color: string }[] = [];
+  const flatPlates: number[] = [];
+
+  for (const w of sortedPlates) {
+    const count = Math.floor((remaining + 0.001) / w);
+    if (count > 0) {
+      const color = PLATE_COLOR_MAP[w] || '#3B82F6';
+      platesPerSide.push({ weight: w, count, color });
+      for (let i = 0; i < count; i += 1) {
+        flatPlates.push(w);
+      }
+      remaining = Math.round((remaining - count * w) * 100) / 100;
+    }
+  }
+
+  const achievedPerSideKg =
+    Math.round(
+      platesPerSide.reduce((acc, p) => acc + p.weight * p.count, 0) * 100
+    ) / 100;
+  const achievedTotalKg =
+    Math.round((safeBar + achievedPerSideKg * 2) * 100) / 100;
+  const remainderPerSideKg =
+    Math.round(Math.max(0, weightPerSideKg - achievedPerSideKg) * 100) / 100;
+
+  return {
+    totalWeightKg: safeTotal,
+    barWeightKg: safeBar,
+    weightPerSideKg,
+    achievedTotalKg,
+    achievedPerSideKg,
+    remainderPerSideKg,
+    platesPerSide,
+    flatPlates,
+  };
+}
+
+/**
+ * Gera automaticamente as 2 séries de aquecimento rápido (1×12 @ 50% e 1×6 @ 75%
+ * da carga da primeira série normal, arredondando para múltiplos de 2,5 kg)
+ */
+export function buildAutoWarmupSets(
+  firstNormalWeightKg: number
+): { weightKg: number; reps: number; pct: number }[] {
+  const safeBase =
+    Number.isFinite(firstNormalWeightKg) && firstNormalWeightKg > 0
+      ? firstNormalWeightKg
+      : 20;
+  const roundTo2_5 = (v: number) => Math.max(2.5, Math.round(v / 2.5) * 2.5);
+
+  return [
+    {
+      pct: 50,
+      weightKg: roundTo2_5(safeBase * 0.5),
+      reps: 12,
+    },
+    {
+      pct: 75,
+      weightKg: roundTo2_5(safeBase * 0.75),
+      reps: 6,
+    },
+  ];
+}
+
 /**
  * Gera sugestão de séries de aquecimento (Warm-up sets) para uma carga de trabalho
  */
@@ -433,4 +544,177 @@ export function formatTimerClock(seconds: number): string {
     return `${pad(hrs)}:${pad(mins)}:${pad(secs)}`;
   }
   return `${pad(mins)}:${pad(secs)}`;
+}
+
+export interface WeeklyDayStatus {
+  label: string;
+  dateKey: string;
+  trained: boolean;
+  isToday: boolean;
+}
+
+export interface WeeklyStreakStats {
+  workoutsThisWeek: number;
+  weeklyGoal: number;
+  consecutiveWeeks: number;
+  days: WeeklyDayStatus[];
+}
+
+function toLocalDateKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function getMondayStart(d: Date): Date {
+  const copy = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const day = copy.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  copy.setDate(copy.getDate() + diff);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
+export function calculateWeeklyStreakStats(
+  workoutHistory: WorkoutSession[],
+  weeklyGoal: number = 4,
+  referenceDate: Date = new Date()
+): WeeklyStreakStats {
+  const goal = Math.max(1, Math.round(weeklyGoal || 4));
+  const todayKey = toLocalDateKey(referenceDate);
+  const currentMonday = getMondayStart(referenceDate);
+
+  const countWorkoutsInWeek = (monday: Date): number => {
+    const startMs = monday.getTime();
+    const endDate = new Date(monday);
+    endDate.setDate(endDate.getDate() + 7);
+    const endMs = endDate.getTime();
+    let count = 0;
+    for (const w of workoutHistory) {
+      const t = new Date(w.startTime).getTime();
+      if (t >= startMs && t < endMs) {
+        count += 1;
+      }
+    }
+    return count;
+  };
+
+  const trainedDateKeys = new Set<string>();
+  for (const w of workoutHistory) {
+    const dt = new Date(w.startTime);
+    if (!Number.isNaN(dt.getTime())) {
+      trainedDateKeys.add(toLocalDateKey(dt));
+    }
+  }
+
+  const dayLabels = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+  const days: WeeklyDayStatus[] = dayLabels.map((label, idx) => {
+    const d = new Date(currentMonday);
+    d.setDate(d.getDate() + idx);
+    const key = toLocalDateKey(d);
+    return {
+      label,
+      dateKey: key,
+      trained: trainedDateKeys.has(key),
+      isToday: key === todayKey,
+    };
+  });
+
+  const workoutsThisWeek = countWorkoutsInWeek(currentMonday);
+
+  let consecutiveWeeks = 0;
+  if (workoutsThisWeek >= goal) {
+    consecutiveWeeks += 1;
+  }
+
+  // Checa semanas anteriores consecutivas
+  for (let wIdx = 1; wIdx <= 52; wIdx += 1) {
+    const pastMonday = new Date(currentMonday);
+    pastMonday.setDate(pastMonday.getDate() - wIdx * 7);
+    const count = countWorkoutsInWeek(pastMonday);
+    if (count >= goal) {
+      consecutiveWeeks += 1;
+    } else {
+      break;
+    }
+  }
+
+  return {
+    workoutsThisWeek,
+    weeklyGoal: goal,
+    consecutiveWeeks,
+    days,
+  };
+}
+
+export interface RoutineLastTrainedInfo {
+  lastSession: WorkoutSession | null;
+  daysAgo: number | null;
+  label: string;
+  timestamp: number;
+}
+
+export function getRoutineLastTrainedInfo(
+  routine: { id: string; title: string },
+  workoutHistory: WorkoutSession[],
+  referenceDate: Date = new Date()
+): RoutineLastTrainedInfo {
+  const normTitle = routine.title.trim().toLowerCase();
+  let latest: WorkoutSession | null = null;
+  let latestTime = 0;
+
+  for (const w of workoutHistory) {
+    const matchesId = w.routineId && w.routineId === routine.id;
+    const matchesTitle = w.title.trim().toLowerCase() === normTitle;
+    if (matchesId || matchesTitle) {
+      const t = new Date(w.startTime).getTime();
+      if (t > latestTime) {
+        latestTime = t;
+        latest = w;
+      }
+    }
+  }
+
+  if (!latest || latestTime === 0) {
+    return {
+      lastSession: null,
+      daysAgo: null,
+      label: 'Ainda não realizado',
+      timestamp: 0,
+    };
+  }
+
+  const refMidnight = new Date(
+    referenceDate.getFullYear(),
+    referenceDate.getMonth(),
+    referenceDate.getDate()
+  ).getTime();
+  const lastDate = new Date(latest.startTime);
+  const lastMidnight = new Date(
+    lastDate.getFullYear(),
+    lastDate.getMonth(),
+    lastDate.getDate()
+  ).getTime();
+
+  const daysAgo = Math.max(
+    0,
+    Math.round((refMidnight - lastMidnight) / 86_400_000)
+  );
+
+  let label = '';
+  if (daysAgo === 0) {
+    label = 'Concluído hoje';
+  } else if (daysAgo === 1) {
+    label = 'Concluído ontem';
+  } else {
+    label = `Última vez: há ${daysAgo} dias`;
+  }
+
+  return {
+    lastSession: latest,
+    daysAgo,
+    label,
+    timestamp: latestTime,
+  };
 }

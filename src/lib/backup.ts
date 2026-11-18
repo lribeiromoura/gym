@@ -7,9 +7,38 @@ import type {
   UserSettings,
   WorkoutSession,
 } from '@/types/workout';
+import { INITIAL_USER_SETTINGS } from '@/data/initial-data';
 
 export const BACKUP_APP_ID = 'ironpulse';
 export const BACKUP_SCHEMA_VERSION = 1;
+
+/**
+ * Garante retrocompatibilidade de `UserSettings` para estados salvos no `localStorage`
+ * ou arquivos `.json` de versões anteriores que não possuíam `theme` ou `showRpeColumn`.
+ */
+export function resolveUserSettings(
+  incoming?: Partial<UserSettings> | null
+): UserSettings {
+  const safe = incoming && typeof incoming === 'object' ? incoming : {};
+  const barWeight =
+    typeof safe.defaultBarWeightKg === 'number' && safe.defaultBarWeightKg > 0
+      ? safe.defaultBarWeightKg
+      : typeof safe.barbellWeightKg === 'number' && safe.barbellWeightKg > 0
+        ? safe.barbellWeightKg
+        : INITIAL_USER_SETTINGS.defaultBarWeightKg;
+
+  return {
+    ...INITIAL_USER_SETTINGS,
+    ...safe,
+    defaultBarWeightKg: barWeight,
+    barbellWeightKg: barWeight,
+    theme: safe.theme === 'light' ? 'light' : 'dark',
+    showRpeColumn:
+      typeof safe.showRpeColumn === 'boolean'
+        ? safe.showRpeColumn
+        : INITIAL_USER_SETTINGS.showRpeColumn,
+  };
+}
 
 export interface BackupData {
   exercises: Exercise[];

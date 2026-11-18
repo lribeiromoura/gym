@@ -356,18 +356,19 @@ export function ProfileAnalyticsView() {
                   value={nameInput}
                   onChange={(e) => setNameInput(e.target.value)}
                   placeholder="Seu nome..."
-                  className="w-full px-3 py-1.5 rounded-xl bg-[#F1F5F9] border border-[#0084FF] text-sm font-bold text-slate-900 focus:outline-none"
+                  className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-[#0084FF] text-base font-bold text-slate-900 focus:outline-none"
                 />
                 <button
                   type="submit"
-                  className="px-3 py-1.5 rounded-xl bg-[#0084FF] text-white text-xs font-bold flex items-center gap-1 shrink-0"
+                  className="h-11 px-3.5 rounded-xl bg-[#0084FF] text-white text-xs font-bold flex items-center gap-1 shrink-0"
                 >
                   <Check className="w-3.5 h-3.5" /> Salvar
                 </button>
                 <button
                   type="button"
+                  aria-label="Cancelar edição do nome"
                   onClick={() => setIsEditingName(false)}
-                  className="p-1.5 rounded-xl bg-slate-100 text-slate-500 hover:text-slate-900"
+                  className="w-11 h-11 rounded-xl bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center shrink-0"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -377,7 +378,7 @@ export function ProfileAnalyticsView() {
                 value={bioInput}
                 onChange={(e) => setBioInput(e.target.value)}
                 placeholder="Sua bio ou objetivo (opcional)..."
-                className="w-full px-3 py-1.5 rounded-xl bg-[#F1F5F9] border border-slate-200 text-xs text-slate-700 focus:outline-none"
+                className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-700 focus:outline-none"
               />
             </form>
           ) : (
@@ -393,9 +394,9 @@ export function ProfileAnalyticsView() {
                     setIsEditingName(true);
                   }}
                   title="Alterar Nome"
-                  className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-[#0084FF] flex items-center gap-1 transition"
+                  className="min-h-[44px] px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-[#0084FF] flex items-center gap-1.5 transition"
                 >
-                  <Edit3 className="w-3 h-3" /> Alterar Nome
+                  <Edit3 className="w-3.5 h-3.5" /> Alterar Nome
                 </button>
               </div>
               {settings.bio && (
@@ -432,9 +433,9 @@ export function ProfileAnalyticsView() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-2xs">
         <button
           onClick={() => setSubTab('analytics')}
-          className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+          className={`min-h-[44px] py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
             subTab === 'analytics'
-              ? 'bg-[#0084FF] text-white shadow-xs'
+              ? 'bg-[#2563EB] text-white shadow-xs'
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
@@ -442,9 +443,9 @@ export function ProfileAnalyticsView() {
         </button>
         <button
           onClick={() => setSubTab('measurements')}
-          className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+          className={`min-h-[44px] py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
             subTab === 'measurements'
-              ? 'bg-[#0084FF] text-white shadow-xs'
+              ? 'bg-[#2563EB] text-white shadow-xs'
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
@@ -452,9 +453,9 @@ export function ProfileAnalyticsView() {
         </button>
         <button
           onClick={() => setSubTab('photos')}
-          className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+          className={`min-h-[44px] py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
             subTab === 'photos'
-              ? 'bg-[#0084FF] text-white shadow-xs'
+              ? 'bg-[#2563EB] text-white shadow-xs'
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
@@ -462,9 +463,9 @@ export function ProfileAnalyticsView() {
         </button>
         <button
           onClick={() => setSubTab('data')}
-          className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+          className={`min-h-[44px] py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
             subTab === 'data'
-              ? 'bg-[#0084FF] text-white shadow-xs'
+              ? 'bg-[#2563EB] text-white shadow-xs'
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
@@ -495,10 +496,10 @@ export function ProfileAnalyticsView() {
                 <button
                   key={String(opt.val)}
                   onClick={() => setPeriodDays(opt.val)}
-                  className={`px-3 py-1 rounded-lg font-semibold transition ${
+                  className={`min-h-[44px] px-3.5 py-2 rounded-lg font-semibold transition ${
                     periodDays === opt.val
-                      ? 'bg-[#0084FF] text-white'
-                      : 'text-slate-500 hover:text-slate-900'
+                      ? 'bg-[#2563EB] text-white'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   {opt.label}
@@ -660,9 +661,9 @@ export function ProfileAnalyticsView() {
               <div className="flex bg-slate-100 p-1 rounded-xl text-xs">
                 <button
                   onClick={() => setChartType('volume')}
-                  className={`px-3 py-1 rounded-lg font-semibold ${
+                  className={`min-h-[44px] px-3 py-1.5 rounded-lg font-semibold ${
                     chartType === 'volume'
-                      ? 'bg-[#0084FF] text-white'
+                      ? 'bg-[#2563EB] text-white'
                       : 'text-slate-600'
                   }`}
                 >
@@ -670,9 +671,9 @@ export function ProfileAnalyticsView() {
                 </button>
                 <button
                   onClick={() => setChartType('duration')}
-                  className={`px-3 py-1 rounded-lg font-semibold ${
+                  className={`min-h-[44px] px-3 py-1.5 rounded-lg font-semibold ${
                     chartType === 'duration'
-                      ? 'bg-[#0084FF] text-white'
+                      ? 'bg-[#2563EB] text-white'
                       : 'text-slate-600'
                   }`}
                 >
@@ -680,9 +681,9 @@ export function ProfileAnalyticsView() {
                 </button>
                 <button
                   onClick={() => setChartType('sets')}
-                  className={`px-3 py-1 rounded-lg font-semibold ${
+                  className={`min-h-[44px] px-3 py-1.5 rounded-lg font-semibold ${
                     chartType === 'sets'
-                      ? 'bg-[#0084FF] text-white'
+                      ? 'bg-[#2563EB] text-white'
                       : 'text-slate-600'
                   }`}
                 >
@@ -696,52 +697,62 @@ export function ProfileAnalyticsView() {
                 Complete um treino para visualizar o gráfico de evolução.
               </div>
             ) : (
-              <div className="grid grid-cols-8 gap-2 items-end h-44 pt-6 px-2 bg-slate-50 border border-slate-200 rounded-xl">
-                {[...filteredWorkouts]
+              (() => {
+                const displayedSessions = [...filteredWorkouts]
                   .slice(0, 8)
-                  .reverse()
-                  .map((w) => {
-                    const val =
-                      chartType === 'volume'
-                        ? w.totalVolumeKg
-                        : chartType === 'duration'
-                        ? Math.round(w.durationSeconds / 60)
-                        : w.totalSets;
-                    const maxPossible =
-                      chartType === 'volume'
-                        ? 24000
-                        : chartType === 'duration'
-                        ? 90
-                        : 24;
-                    const pct = Math.max(
-                      12,
-                      Math.min(100, (val / maxPossible) * 100)
-                    );
-                    return (
-                      <div
-                        key={w.id}
-                        className="flex flex-col items-center justify-end h-full gap-1.5"
-                      >
-                        <span className="text-[10px] font-bold text-slate-700">
-                          {chartType === 'volume'
-                            ? `${(val / 1000).toFixed(1)}k`
-                            : val}
-                        </span>
+                  .reverse();
+                const getSessionVal = (w: (typeof displayedSessions)[0]) =>
+                  chartType === 'volume'
+                    ? w.totalVolumeKg
+                    : chartType === 'duration'
+                    ? Math.round(w.durationSeconds / 60)
+                    : w.totalSets;
+                const maxInSeries = Math.max(
+                  ...displayedSessions.map(getSessionVal),
+                  1
+                );
+                const dynamicMax = maxInSeries * 1.1;
+
+                return (
+                  <div className="grid grid-cols-8 gap-2 items-end h-44 pt-6 px-2 bg-slate-50 border border-slate-200 rounded-xl">
+                    {displayedSessions.map((w) => {
+                      const val = getSessionVal(w);
+                      const pct =
+                        val <= 0
+                          ? 8
+                          : Math.max(
+                              15,
+                              Math.min(100, Math.round((val / dynamicMax) * 100))
+                            );
+                      return (
                         <div
-                          style={{ height: `${pct}%` }}
-                          className="w-full max-w-[34px] rounded-t-lg bg-[#0084FF] hover:bg-blue-600 transition-all"
-                          title={`${w.title}: ${val}`}
-                        />
-                        <span className="text-[10px] text-slate-500 pb-1">
-                          {new Date(w.startTime).toLocaleDateString('pt-BR', {
-                            day: '2-digit',
-                            month: '2-digit',
-                          })}
-                        </span>
-                      </div>
-                    );
-                  })}
-              </div>
+                          key={w.id}
+                          className="flex flex-col items-center justify-end h-full gap-1.5"
+                        >
+                          <span className="text-xs font-bold text-slate-700 tabular-nums">
+                            {chartType === 'volume'
+                              ? val >= 1000
+                                ? `${(val / 1000).toFixed(1)}k`
+                                : `${val}`
+                              : val}
+                          </span>
+                          <div
+                            style={{ height: `${pct}%` }}
+                            className="w-full max-w-[34px] rounded-t-lg bg-[#3B82F6] hover:bg-blue-600 transition-all"
+                            title={`${w.title}: ${val}`}
+                          />
+                          <span className="text-xs text-slate-500 pb-1 tabular-nums">
+                            {new Date(w.startTime).toLocaleDateString('pt-BR', {
+                              day: '2-digit',
+                              month: '2-digit',
+                            })}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()
             )}
           </div>
         </div>
@@ -761,7 +772,7 @@ export function ProfileAnalyticsView() {
             </div>
             <button
               onClick={() => setShowAddMeasurement(true)}
-              className="px-4 py-2.5 rounded-full bg-[#0084FF] hover:bg-blue-600 text-white text-xs font-bold flex items-center gap-1.5"
+              className="h-11 px-4 rounded-full bg-[#0084FF] hover:bg-blue-600 text-white text-xs font-bold flex items-center gap-1.5"
             >
               <Plus className="w-4 h-4" /> Registrar Medida
             </button>
@@ -789,7 +800,7 @@ export function ProfileAnalyticsView() {
                     <button
                       key={key}
                       onClick={() => setMeasureMetric(key)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
+                      className={`min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-bold border transition ${
                         measureMetric === key
                           ? 'bg-blue-50 border-[#0084FF] text-[#0084FF]'
                           : 'bg-slate-50 border-slate-200 text-slate-600 hover:text-slate-900'
@@ -808,20 +819,30 @@ export function ProfileAnalyticsView() {
                         key={m.id}
                         className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col justify-between"
                       >
-                        <div className="flex items-center justify-between text-[11px] text-slate-500">
+                        <div className="flex items-center justify-between text-xs text-slate-500">
                           <span>
                             {new Date(m.date + 'T12:00:00').toLocaleDateString(
                               'pt-BR'
                             )}
                           </span>
                           <button
-                            onClick={() => deleteBodyMeasurement(m.id)}
-                            className="text-slate-400 hover:text-red-500"
+                            type="button"
+                            aria-label="Excluir medida corporal"
+                            onClick={() => {
+                              if (
+                                confirm(
+                                  'Deseja excluir este registro de medida corporal?'
+                                )
+                              ) {
+                                deleteBodyMeasurement(m.id);
+                              }
+                            }}
+                            className="w-11 h-11 -mr-1.5 -mt-1.5 rounded-xl flex items-center justify-center text-slate-400 hover:text-red-500 transition"
                           >
-                            <Trash2 className="w-3 h-3" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
-                        <p className="text-xl font-extrabold text-slate-900 mt-2">
+                        <p className="text-xl font-extrabold text-slate-900 mt-1">
                           {value ?? '—'}{' '}
                           <span className="text-xs font-normal text-[#0084FF]">
                             {MEASURE_LABELS[measureMetric].unit}
@@ -949,8 +970,14 @@ export function ProfileAnalyticsView() {
                       </p>
                     </div>
                     <button
-                      onClick={() => deleteProgressPhoto(photo.id)}
-                      className="text-slate-400 hover:text-red-500 p-1"
+                      type="button"
+                      aria-label="Excluir foto de progresso"
+                      onClick={() => {
+                        if (confirm('Deseja excluir esta foto de progresso?')) {
+                          deleteProgressPhoto(photo.id);
+                        }
+                      }}
+                      className="w-11 h-11 rounded-xl flex items-center justify-center text-slate-400 hover:text-red-500 transition"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -1123,8 +1150,49 @@ export function ProfileAnalyticsView() {
                   type="text"
                   value={settings.name}
                   onChange={(e) => updateSettings({ name: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-[#F1F5F9] border border-slate-200 text-slate-900"
+                  className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">
+                    Tema da Interface
+                  </label>
+                  <select
+                    value={settings.theme ?? 'dark'}
+                    onChange={(e) =>
+                      updateSettings({
+                        theme: e.target.value === 'light' ? 'light' : 'dark',
+                      })
+                    }
+                    className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-slate-900 font-semibold"
+                  >
+                    <option value="dark">🌙 Escuro (IronPulse Dark — Padrão)</option>
+                    <option value="light">☀️ Claro (Alto Contraste)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">
+                    Meta Semanal (treinos)
+                  </label>
+                  <select
+                    value={settings.weeklyWorkoutGoal || 4}
+                    onChange={(e) =>
+                      updateSettings({
+                        weeklyWorkoutGoal: Number(e.target.value),
+                      })
+                    }
+                    className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-slate-900 font-semibold"
+                  >
+                    <option value={2}>2 treinos / semana</option>
+                    <option value={3}>3 treinos / semana</option>
+                    <option value={4}>4 treinos / semana</option>
+                    <option value={5}>5 treinos / semana</option>
+                    <option value={6}>6 treinos / semana</option>
+                  </select>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1139,7 +1207,7 @@ export function ProfileAnalyticsView() {
                         defaultRestSeconds: Number(e.target.value),
                       })
                     }
-                    className="w-full px-3 py-2 rounded-xl bg-[#F1F5F9] border border-slate-200 text-slate-900"
+                    className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-slate-900"
                   >
                     <option value={60}>60 segundos</option>
                     <option value={90}>90 segundos</option>
@@ -1157,9 +1225,10 @@ export function ProfileAnalyticsView() {
                     onChange={(e) =>
                       updateSettings({
                         defaultBarWeightKg: Number(e.target.value),
+                        barbellWeightKg: Number(e.target.value),
                       })
                     }
-                    className="w-full px-3 py-2 rounded-xl bg-[#F1F5F9] border border-slate-200 text-slate-900"
+                    className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-slate-900"
                   >
                     <option value={20}>20 kg (Olímpica)</option>
                     <option value={15}>15 kg</option>
@@ -1168,7 +1237,21 @@ export function ProfileAnalyticsView() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-2">
+              <label className="flex items-center justify-between pt-2 min-h-[44px] cursor-pointer">
+                <span className="text-slate-700 font-medium">
+                  Exibir coluna RPE na tabela de treino (Avançado)
+                </span>
+                <input
+                  type="checkbox"
+                  checked={Boolean(settings.showRpeColumn)}
+                  onChange={(e) =>
+                    updateSettings({ showRpeColumn: e.target.checked })
+                  }
+                  className="w-5 h-5 accent-[#2563EB]"
+                />
+              </label>
+
+              <label className="flex items-center justify-between min-h-[44px] cursor-pointer">
                 <span className="text-slate-700 font-medium">
                   Alerta Sonoro ao Fim do Descanso
                 </span>
@@ -1178,9 +1261,9 @@ export function ProfileAnalyticsView() {
                   onChange={(e) =>
                     updateSettings({ soundEnabled: e.target.checked })
                   }
-                  className="w-4 h-4 accent-[#0084FF]"
+                  className="w-5 h-5 accent-[#2563EB]"
                 />
-              </div>
+              </label>
 
               <div className="pt-3 border-t border-slate-100 space-y-2.5">
                 <div className="flex items-center justify-between gap-2">
@@ -1262,8 +1345,9 @@ export function ProfileAnalyticsView() {
               </h3>
               <button
                 type="button"
+                aria-label="Fechar modal de medidas"
                 onClick={() => setShowAddMeasurement(false)}
-                className="text-slate-400"
+                className="w-11 h-11 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1278,7 +1362,7 @@ export function ProfileAnalyticsView() {
                   type="date"
                   value={mDate}
                   onChange={(e) => setMDate(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#F1F5F9] border border-slate-200 text-slate-900"
+                  className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"
                 />
               </div>
               <div>
@@ -1290,7 +1374,7 @@ export function ProfileAnalyticsView() {
                   step="0.1"
                   value={mWeight}
                   onChange={(e) => setMWeight(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#F1F5F9] border border-slate-200 text-slate-900"
+                  className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"
                 />
               </div>
               <div>
@@ -1302,7 +1386,7 @@ export function ProfileAnalyticsView() {
                   step="0.1"
                   value={mBodyFat}
                   onChange={(e) => setMBodyFat(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#F1F5F9] border border-slate-200 text-slate-900"
+                  className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"
                 />
               </div>
               <div>
@@ -1314,7 +1398,7 @@ export function ProfileAnalyticsView() {
                   step="0.1"
                   value={mChest}
                   onChange={(e) => setMChest(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#F1F5F9] border border-slate-200 text-slate-900"
+                  className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"
                 />
               </div>
               <div>
@@ -1326,7 +1410,7 @@ export function ProfileAnalyticsView() {
                   step="0.1"
                   value={mBicep}
                   onChange={(e) => setMBicep(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#F1F5F9] border border-slate-200 text-slate-900"
+                  className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"
                 />
               </div>
               <div>
@@ -1338,7 +1422,7 @@ export function ProfileAnalyticsView() {
                   step="0.1"
                   value={mWaist}
                   onChange={(e) => setMWaist(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#F1F5F9] border border-slate-200 text-slate-900"
+                  className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"
                 />
               </div>
               <div>
@@ -1350,7 +1434,7 @@ export function ProfileAnalyticsView() {
                   step="0.1"
                   value={mThigh}
                   onChange={(e) => setMThigh(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#F1F5F9] border border-slate-200 text-slate-900"
+                  className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"
                 />
               </div>
               <div>
@@ -1362,7 +1446,7 @@ export function ProfileAnalyticsView() {
                   step="0.1"
                   value={mCalf}
                   onChange={(e) => setMCalf(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#F1F5F9] border border-slate-200 text-slate-900"
+                  className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"
                 />
               </div>
               <div>
@@ -1373,7 +1457,7 @@ export function ProfileAnalyticsView() {
                   type="number"
                   value={mKcal}
                   onChange={(e) => setMKcal(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#F1F5F9] border border-slate-200 text-slate-900"
+                  className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"
                 />
               </div>
             </div>
@@ -1382,13 +1466,13 @@ export function ProfileAnalyticsView() {
               <button
                 type="button"
                 onClick={() => setShowAddMeasurement(false)}
-                className="px-4 py-2 rounded-xl bg-slate-100 text-xs font-semibold text-slate-700"
+                className="h-11 px-4 rounded-xl bg-slate-100 text-xs font-semibold text-slate-700"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 rounded-xl bg-[#0084FF] text-xs font-bold text-white"
+                className="h-11 px-5 rounded-xl bg-[#0084FF] text-xs font-bold text-white"
               >
                 Salvar Medida
               </button>
