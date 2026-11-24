@@ -1,9 +1,19 @@
 'use client';
 
 import React, { useState } from 'react';
-import { AlertTriangle, RotateCcw, X } from 'lucide-react';
+import { AlertTriangle, RotateCcw } from 'lucide-react';
 import type { BackupFile, RestoreMode } from '@/lib/backup';
 import { summarizeBackup } from '@/lib/backup';
+import { Button } from '@/components/ui/button';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '@/components/ui/responsive-dialog';
 
 interface Props {
   file: BackupFile;
@@ -39,90 +49,116 @@ export function RestoreBackupModal({ file, onCancel, onConfirm }: Props) {
   ];
 
   return (
-    <div className="fixed inset-0 z-[80] bg-slate-900/50 flex items-end sm:items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-              <RotateCcw className="w-4 h-4 text-[#0084FF]" /> Restaurar Backup
-            </h3>
-            <p className="text-xs text-slate-500 mt-1">Criado em {exportedLabel}</p>
-          </div>
-          <button
-            onClick={onCancel}
-            aria-label="Fechar"
-            className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600"
+    <ResponsiveDialog
+      open={true}
+      onOpenChange={(open) => {
+        if (!open) onCancel();
+      }}
+    >
+      <ResponsiveDialogContent className="sm:max-w-md">
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle className="flex items-center gap-2">
+            <RotateCcw className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+            <span>Restaurar Backup</span>
+          </ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
+            Criado em {exportedLabel}
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          <ul className="rounded-xl border border-border bg-secondary/40 divide-y divide-border text-sm">
+            {rows.map(([label, count]) => (
+              <li key={label} className="flex justify-between px-4 py-2.5">
+                <span className="text-muted-foreground">{label}</span>
+                <span className="font-bold text-foreground tabular-nums">
+                  {count}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          {!file.includesPhotos && (
+            <p className="text-xs text-muted-foreground">
+              Este backup foi criado sem fotos.
+            </p>
+          )}
+
+          <RadioGroup
+            value={mode}
+            onValueChange={(value) => setMode(value as RestoreMode)}
+            className="gap-2"
           >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+            {(
+              [
+                [
+                  'replace',
+                  'Substituir tudo',
+                  'Troca os dados atuais pelos do backup.',
+                ],
+                [
+                  'merge',
+                  'Mesclar',
+                  'Mantém os dados atuais e adiciona só o que não existe.',
+                ],
+              ] as const
+            ).map(([value, title, desc]) => (
+              <label
+                key={value}
+                htmlFor={`restore-mode-${value}`}
+                className={`flex gap-3 items-start p-3 rounded-xl border cursor-pointer transition min-h-11 ${
+                  mode === value
+                    ? 'border-primary bg-primary/10'
+                    : 'border-border bg-card hover:bg-secondary/50'
+                }`}
+              >
+                <RadioGroupItem
+                  id={`restore-mode-${value}`}
+                  value={value}
+                  className="mt-0.5"
+                />
+                <span className="space-y-0.5">
+                  <span className="block text-sm font-bold text-foreground">
+                    {title}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    {desc}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </RadioGroup>
 
-        <ul className="rounded-xl border border-slate-200 divide-y divide-slate-100 text-sm">
-          {rows.map(([label, count]) => (
-            <li key={label} className="flex justify-between px-4 py-2.5">
-              <span className="text-slate-600">{label}</span>
-              <span className="font-bold text-slate-900">{count}</span>
-            </li>
-          ))}
-        </ul>
-        {!file.includesPhotos && (
-          <p className="text-xs text-slate-500">Este backup foi criado sem fotos.</p>
-        )}
-
-        <div className="space-y-2">
-          {(
-            [
-              ['replace', 'Substituir tudo', 'Troca os dados atuais pelos do backup.'],
-              ['merge', 'Mesclar', 'Mantém os dados atuais e adiciona só o que não existe.'],
-            ] as const
-          ).map(([value, title, desc]) => (
-            <label
-              key={value}
-              className={`flex gap-3 items-start p-3 rounded-xl border cursor-pointer transition ${
-                mode === value
-                  ? 'border-[#0084FF] bg-blue-50'
-                  : 'border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              <input
-                type="radio"
-                name="restore-mode"
-                className="mt-1 accent-[#0084FF]"
-                checked={mode === value}
-                onChange={() => setMode(value)}
-              />
+          {mode === 'replace' && (
+            <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-800 dark:text-amber-400 text-xs flex gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>
-                <span className="block text-sm font-bold text-slate-900">{title}</span>
-                <span className="block text-xs text-slate-500">{desc}</span>
+                Os dados atuais serão substituídos. Você poderá desfazer logo
+                após a restauração.
               </span>
-            </label>
-          ))}
+            </div>
+          )}
         </div>
 
-        {mode === 'replace' && (
-          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex gap-2">
-            <AlertTriangle className="w-4 h-4 shrink-0" />
-            <span>
-              Os dados atuais serão substituídos. Você poderá desfazer logo após a restauração.
-            </span>
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-3">
-          <button
+        <ResponsiveDialogFooter className="grid grid-cols-2 gap-3">
+          <Button
+            variant="secondary"
+            size="lg"
             onClick={onCancel}
-            className="h-12 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold"
+            className="w-full text-sm"
           >
             Cancelar
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="default"
+            size="lg"
             onClick={() => onConfirm(mode)}
-            className="h-12 rounded-xl bg-[#0084FF] hover:bg-blue-600 text-white text-sm font-bold"
+            className="w-full text-sm"
           >
             Restaurar
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

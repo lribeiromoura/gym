@@ -11,7 +11,6 @@ import {
   ScanBarcode,
   Search,
   WifiOff,
-  X,
 } from 'lucide-react';
 import { FoodItem } from '@/types/nutrition';
 import { FOODS_SEED_BR } from '@/data/foods-seed-br';
@@ -20,6 +19,16 @@ import {
   fetchOpenFoodFactsByBarcode,
   normalizeBarcode,
 } from '@/lib/openfoodfacts';
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '@/components/ui/responsive-dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 interface BarcodeScannerModalProps {
   isOpen: boolean;
@@ -251,10 +260,7 @@ export function BarcodeScannerModal({
 
         const scanFrame = async () => {
           if (!streamRef.current || !videoRef.current) return;
-          if (
-            !isLookingUpRef.current &&
-            videoRef.current.readyState >= 2
-          ) {
+          if (!isLookingUpRef.current && videoRef.current.readyState >= 2) {
             try {
               const detected = await detector.detect(videoRef.current);
               const rawValue = detected[0]?.rawValue;
@@ -342,64 +348,48 @@ export function BarcodeScannerModal({
     };
   }, [isOpen, startCamera, stopCamera]);
 
-  if (!isOpen) return null;
-
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     void lookupBarcode(manualCode);
   };
 
   return (
-    <div
-      onClick={onClose}
-      className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-2 sm:p-4"
+    <ResponsiveDialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) {
+          stopCamera();
+          onClose();
+        }
+      }}
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="barcode-scanner-title"
-        className="bg-white border border-slate-200 rounded-3xl w-full max-w-lg max-h-[92vh] flex flex-col overflow-hidden shadow-2xl"
-      >
-        {/* Cabeçalho */}
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3 shrink-0">
+      <ResponsiveDialogContent className="sm:max-w-lg">
+        <ResponsiveDialogHeader className="shrink-0">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200 text-[#3B82F6] flex items-center justify-center shrink-0">
-              <ScanBarcode className="w-5 h-5" />
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-primary/30 bg-primary/15 text-blue-600 dark:text-blue-400">
+              <ScanBarcode className="size-5" />
             </div>
             <div className="min-w-0">
-              <h2
-                id="barcode-scanner-title"
-                className="text-base sm:text-lg font-extrabold text-slate-900 truncate"
-              >
+              <ResponsiveDialogTitle className="truncate">
                 Ler Código de Barras
-              </h2>
-              <p className="text-xs text-slate-500">
+              </ResponsiveDialogTitle>
+              <ResponsiveDialogDescription>
                 EAN-13, EAN-8 ou UPC-A • Open Food Facts
-              </p>
+              </ResponsiveDialogDescription>
             </div>
           </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Fechar leitor de código de barras"
-            className="w-11 h-11 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center shrink-0 transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+        </ResponsiveDialogHeader>
 
         {/* Corpo */}
-        <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1">
+        <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
           {/* Viewport da Câmera */}
-          <div className="relative rounded-2xl overflow-hidden bg-slate-950 border border-slate-200 aspect-[16/10] flex items-center justify-center">
+          <div className="relative flex aspect-[16/10] items-center justify-center overflow-hidden rounded-2xl border border-border bg-black">
             <video
               ref={videoRef}
               playsInline
               muted
               autoPlay
-              className={`w-full h-full object-cover ${
+              className={`size-full object-cover ${
                 cameraStatus === 'active' ? 'opacity-100' : 'opacity-0'
               }`}
             />
@@ -407,11 +397,11 @@ export function BarcodeScannerModal({
             {cameraStatus === 'active' && (
               <>
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <div className="w-4/5 max-w-[280px] h-28 rounded-2xl border-2 border-[#3B82F6] shadow-[0_0_0_9999px_rgba(0,0,0,0.45)] flex items-center justify-center">
-                    <div className="w-11/12 h-0.5 bg-red-500/80 animate-pulse" />
+                  <div className="flex h-28 w-4/5 max-w-[280px] items-center justify-center rounded-2xl border-2 border-primary shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]">
+                    <div className="h-0.5 w-11/12 animate-pulse bg-red-500/80" />
                   </div>
                 </div>
-                <span className="absolute bottom-2.5 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-black/70 text-white text-[11px] font-semibold whitespace-nowrap">
+                <span className="absolute bottom-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/75 px-3 py-1 text-[11px] font-semibold text-white">
                   Aponte para o código de barras (
                   {cameraEngine === 'native' ? 'Nativo' : 'ZXing'})
                 </span>
@@ -419,8 +409,8 @@ export function BarcodeScannerModal({
             )}
 
             {cameraStatus === 'starting' && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white p-4 text-center">
-                <Loader2 className="w-7 h-7 animate-spin text-[#3B82F6]" />
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4 text-center text-white">
+                <Loader2 className="size-7 animate-spin text-primary" />
                 <p className="text-xs font-semibold">
                   Solicitando acesso à câmera traseira...
                 </p>
@@ -430,104 +420,103 @@ export function BarcodeScannerModal({
             {(cameraStatus === 'denied' ||
               cameraStatus === 'unavailable' ||
               cameraStatus === 'error') && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-slate-200 p-5 text-center bg-slate-900/95">
-                <CameraOff className="w-8 h-8 text-amber-400" />
-                <p className="text-xs leading-relaxed max-w-xs">
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-zinc-950/95 p-5 text-center text-zinc-200">
+                <CameraOff className="size-8 text-amber-400" />
+                <p className="max-w-xs text-xs leading-relaxed">
                   {cameraErrorMsg}
                 </p>
-                <button
-                  type="button"
+                <Button
                   onClick={() => void startCamera()}
-                  className="h-10 px-4 rounded-xl bg-[#2563EB] hover:bg-blue-600 text-white text-xs font-bold flex items-center gap-1.5 transition"
+                  className="text-xs"
                 >
-                  <RefreshCw className="w-3.5 h-3.5" /> Tentar câmera novamente
-                </button>
+                  <RefreshCw className="size-3.5" /> Tentar câmera novamente
+                </Button>
               </div>
             )}
           </div>
 
           {/* Entrada Manual de Código de Barras */}
           <form onSubmit={handleManualSubmit} className="space-y-2">
-            <label
-              htmlFor="manual-barcode-input"
-              className="block text-xs font-bold uppercase tracking-wider text-slate-600"
-            >
+            <Label htmlFor="manual-barcode-input">
               Ou digite o número do código de barras
-            </label>
+            </Label>
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <Camera className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
+                <Camera className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
                   id="manual-barcode-input"
                   type="text"
                   inputMode="numeric"
                   pattern="[0-9]*"
                   value={manualCode}
                   onChange={(e) => {
-                    setManualCode(e.target.value.replace(/\D/g, '').slice(0, 14));
+                    setManualCode(
+                      e.target.value.replace(/\D/g, '').slice(0, 14)
+                    );
                     if (lookupError) setLookupError(null);
                   }}
                   placeholder="Ex: 7891000100103"
-                  className="w-full h-11 pl-10 pr-3 rounded-xl bg-slate-50 border border-slate-200 text-base font-bold text-slate-900 placeholder-slate-400 tabular-nums focus:outline-none focus:border-[#3B82F6]"
+                  className="pl-10 font-bold tabular-nums"
                 />
               </div>
-              <button
+              <Button
                 type="submit"
                 disabled={isLookingUp || manualCode.length < 8}
-                className="h-11 px-4 rounded-xl bg-[#2563EB] hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center gap-1.5 shrink-0 transition"
+                className="shrink-0 text-xs"
               >
                 {isLookingUp ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="size-4 animate-spin" />
                 ) : (
-                  <Search className="w-4 h-4" />
+                  <Search className="size-4" />
                 )}
                 <span>Buscar</span>
-              </button>
+              </Button>
             </div>
           </form>
 
           {/* Feedback de Busca / Produto Não Encontrado */}
           {isLookingUp && (
-            <div className="p-3.5 rounded-2xl bg-blue-50 border border-blue-200 text-[#3B82F6] text-xs font-semibold flex items-center gap-2.5">
-              <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-              <span>Consultando informações nutricionais do código {manualCode}...</span>
+            <div className="flex items-center gap-2.5 rounded-2xl border border-primary/30 bg-primary/15 p-3.5 text-xs font-semibold text-blue-700 dark:text-blue-400">
+              <Loader2 className="size-4 shrink-0 animate-spin" />
+              <span>
+                Consultando informações nutricionais do código {manualCode}...
+              </span>
             </div>
           )}
 
           {lookupError && !isLookingUp && (
             <div
-              className={`p-4 rounded-2xl border space-y-3 ${
+              className={`space-y-3 rounded-2xl border p-4 ${
                 isOfflineError
-                  ? 'bg-amber-50 border-amber-200 text-amber-800'
-                  : 'bg-red-50 border-red-200 text-red-700'
+                  ? 'border-amber-500/30 bg-amber-500/15 text-amber-800 dark:text-amber-400'
+                  : 'border-red-500/30 bg-red-500/15 text-red-700 dark:text-red-400'
               }`}
             >
               <div className="flex items-start gap-2 text-xs font-semibold">
                 {isOfflineError ? (
-                  <WifiOff className="w-4 h-4 shrink-0 mt-0.5" />
+                  <WifiOff className="mt-0.5 size-4 shrink-0" />
                 ) : (
-                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                 )}
                 <span>{lookupError}</span>
               </div>
 
               {notFoundBarcode && (
-                <button
-                  type="button"
+                <Button
                   onClick={() => {
                     stopCamera();
                     onCreateCustomWithBarcode(notFoundBarcode);
                   }}
-                  className="w-full h-11 px-4 rounded-xl bg-[#2563EB] hover:bg-blue-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition"
+                  className="w-full text-xs"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="size-4" />
                   Cadastrar alimento com código {notFoundBarcode}
-                </button>
+                </Button>
               )}
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

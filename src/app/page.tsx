@@ -22,6 +22,8 @@ import { ExercisesView } from '@/components/exercises/ExercisesView';
 import { ProfileAnalyticsView } from '@/components/profile/ProfileAnalyticsView';
 import { NutritionView } from '@/components/nutrition/NutritionView';
 import { ActiveWorkoutDrawer } from '@/components/workout/ActiveWorkoutDrawer';
+import { Button } from '@/components/ui/button';
+import { Toaster } from '@/components/ui/sonner';
 import { decodeShareToken, SharePayload } from '@/lib/share';
 
 type MainTab = 'workout' | 'nutrition' | 'feed' | 'exercises' | 'profile';
@@ -101,60 +103,61 @@ export default function IronPulseAppPage() {
 
   return (
     <div
-      className={`min-h-screen flex flex-col md:flex-row transition-colors ${
-        isDark
-          ? 'theme-dark dark bg-[#0B0F17] text-[#F8FAFC]'
-          : 'theme-light bg-[#F8FAFC] text-slate-900'
+      className={`min-h-screen flex flex-col md:flex-row bg-background text-foreground transition-colors ${
+        isDark ? 'theme-dark dark' : 'theme-light'
       }`}
     >
       {/* Sidebar Desktop */}
-      <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 bg-white border-r border-slate-200 p-5 justify-between z-30">
+      <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 bg-card border-r border-border p-5 justify-between z-30">
         <div className="space-y-6">
           {/* Logo IronPulse + Alternância de Tema */}
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-[#2563EB] flex items-center justify-center text-white font-black text-sm shadow-md shadow-blue-600/25">
+              <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-black text-sm shadow-md shadow-primary/25">
                 IP
               </div>
               <div>
-                <span className="text-xl font-black tracking-tight text-slate-900">
+                <span className="text-xl font-black tracking-tight text-foreground">
                   IRONPULSE
                 </span>
-                <span className="block text-[10px] uppercase tracking-widest text-[#3B82F6] font-bold -mt-1">
+                <span className="block text-[10px] uppercase tracking-widest text-blue-600 dark:text-blue-400 font-bold -mt-1">
                   Workout Tracker
                 </span>
               </div>
             </div>
 
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="icon"
               onClick={toggleTheme}
               aria-label={isDark ? 'Mudar para modo claro' : 'Mudar para modo escuro'}
               title={isDark ? 'Modo Claro (☀️)' : 'Modo Escuro (🌙)'}
-              className="w-11 h-11 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 flex items-center justify-center text-slate-700 transition shrink-0"
+              className="shrink-0"
             >
               {isDark ? (
                 <Sun className="w-5 h-5 text-amber-400" />
               ) : (
-                <Moon className="w-5 h-5 text-slate-700" />
+                <Moon className="w-5 h-5 text-foreground" />
               )}
-            </button>
+            </Button>
           </div>
 
           {activeWorkout ? (
-            <button
+            <Button
+              variant="outline"
               onClick={() => toggleMinimizeWorkout(false)}
-              className="w-full min-h-[44px] py-3 px-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 font-extrabold text-xs flex items-center justify-center gap-2"
+              className="w-full min-h-11 bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 font-extrabold text-xs"
             >
-              <Flame className="w-4 h-4 text-emerald-600" /> Retomar Treino Ativo
-            </button>
+              <Flame className="w-4 h-4" /> Retomar Treino Ativo
+            </Button>
           ) : (
-            <button
+            <Button
+              variant="default"
               onClick={() => startEmptyWorkout('Treino Livre')}
-              className="w-full min-h-[44px] py-3 px-4 rounded-xl bg-[#2563EB] hover:bg-blue-600 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-md shadow-blue-600/20 transition"
+              className="w-full min-h-11 font-extrabold text-xs shadow-md shadow-primary/20"
             >
               <Play className="w-4 h-4 fill-current" /> + Iniciar Treino
-            </button>
+            </Button>
           )}
 
           <nav className="space-y-1.5">
@@ -164,11 +167,12 @@ export default function IronPulseAppPage() {
               return (
                 <button
                   key={item.id}
+                  type="button"
                   onClick={() => setActiveTab(item.id)}
-                  className={`w-full min-h-[44px] flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm font-bold transition ${
+                  className={`w-full min-h-11 flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm font-bold transition cursor-pointer ${
                     isActive
-                      ? 'bg-[#3B82F6]/15 text-[#3B82F6]'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                      ? 'bg-primary/15 text-blue-600 dark:text-blue-400'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
                   }`}
                 >
                   <Icon className="w-5 h-5" />
@@ -179,20 +183,20 @@ export default function IronPulseAppPage() {
           </nav>
         </div>
 
-        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
+        <div className="bg-secondary/60 border border-border rounded-2xl p-4 space-y-2">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-600 font-semibold flex items-center gap-1">
+            <span className="text-muted-foreground font-semibold flex items-center gap-1">
               <Trophy className="w-3.5 h-3.5 text-amber-500" /> Total de Sessões
             </span>
-            <span className="font-extrabold text-slate-900">
+            <span className="font-extrabold text-foreground tabular-nums">
               {workoutHistory.length}
             </span>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-600 font-semibold flex items-center gap-1">
-              <BarChart3 className="w-3.5 h-3.5 text-[#3B82F6]" /> PRs Históricos
+            <span className="text-muted-foreground font-semibold flex items-center gap-1">
+              <BarChart3 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> PRs Históricos
             </span>
-            <span className="font-extrabold text-amber-600">
+            <span className="font-extrabold text-amber-600 dark:text-amber-400 tabular-nums">
               {workoutHistory.reduce((acc, w) => acc + w.prCount, 0)}
             </span>
           </div>
@@ -200,39 +204,40 @@ export default function IronPulseAppPage() {
       </aside>
 
       {/* Top Header Mobile com suporte a Safe Area do iPhone */}
-      <header className="md:hidden sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2.5 flex items-center justify-between">
+      <header className="md:hidden sticky top-0 z-30 bg-card/95 backdrop-blur-md border-b border-border px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2.5 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-[#2563EB] flex items-center justify-center text-white font-black text-xs shadow-sm">
+          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-black text-xs shadow-xs">
             IP
           </div>
-          <span className="text-lg font-black tracking-tight text-slate-900">
+          <span className="text-lg font-black tracking-tight text-foreground">
             IRONPULSE
           </span>
         </div>
 
         <div className="flex items-center gap-2">
           {!activeWorkout && activeTab !== 'workout' && (
-            <button
+            <Button
+              variant="default"
               onClick={() => startEmptyWorkout('Treino Livre')}
-              className="h-11 px-4 rounded-full bg-[#2563EB] hover:bg-blue-600 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+              className="h-11 px-4 rounded-full text-xs font-bold shadow-xs"
             >
               <Play className="w-3.5 h-3.5 fill-current" /> Treinar
-            </button>
+            </Button>
           )}
 
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="icon"
             onClick={toggleTheme}
             aria-label={isDark ? 'Ativar modo claro' : 'Ativar modo escuro'}
             title={isDark ? 'Modo Claro (☀️)' : 'Modo Escuro (🌙)'}
-            className="w-11 h-11 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 flex items-center justify-center text-slate-700 transition"
           >
             {isDark ? (
               <Sun className="w-5 h-5 text-amber-400" />
             ) : (
-              <Moon className="w-5 h-5 text-slate-700" />
+              <Moon className="w-5 h-5 text-foreground" />
             )}
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -252,18 +257,19 @@ export default function IronPulseAppPage() {
       </main>
 
       {/* Barra de Navegação Inferior Mobile com Safe Area do iPhone (5 abas) */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 grid grid-cols-5 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] px-1">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-card/95 backdrop-blur-md border-t border-border grid grid-cols-5 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] px-1">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
           return (
             <button
               key={item.id}
+              type="button"
               onClick={() => setActiveTab(item.id)}
-              className={`min-h-[48px] flex flex-col items-center justify-center py-1.5 px-0.5 rounded-xl text-[11px] leading-tight font-bold transition whitespace-nowrap ${
+              className={`min-h-[48px] flex flex-col items-center justify-center py-1.5 px-0.5 rounded-xl text-[11px] leading-tight font-bold transition whitespace-nowrap cursor-pointer ${
                 isActive
-                  ? 'text-[#3B82F6]'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'text-blue-600 dark:text-blue-400'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               <Icon className="w-5 h-5 mb-0.5 shrink-0" />
@@ -285,6 +291,8 @@ export default function IronPulseAppPage() {
           setActiveTab('workout');
         }}
       />
+
+      <Toaster theme={isDark ? 'dark' : 'light'} />
     </div>
   );
 }

@@ -9,12 +9,14 @@ import {
   Clock,
   Dumbbell,
   Edit3,
+  MoreHorizontal,
   Play,
   Share2,
   Sparkles,
   Trash2,
   Trophy,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { MUSCLE_LABELS, WorkoutSession } from '@/types/workout';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import {
@@ -31,6 +33,17 @@ import {
   shareOrCopyLink,
 } from '@/lib/share';
 import { WorkoutAIReportModal } from '@/components/workout/WorkoutAIReportModal';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 export function SocialFeedView() {
   const workoutHistory = useWorkoutStore((s) => s.workoutHistory);
@@ -51,11 +64,12 @@ export function SocialFeedView() {
   const [expandedSessionIds, setExpandedSessionIds] = useState<
     Record<string, boolean>
   >({});
-  const [savedToastId, setSavedToastId] = useState<string | null>(null);
   const [sharedSessionId, setSharedSessionId] = useState<string | null>(null);
   const [aiReportSession, setAiReportSession] = useState<WorkoutSession | null>(
     null
   );
+  const [pendingDeleteSession, setPendingDeleteSession] =
+    useState<WorkoutSession | null>(null);
 
   const exerciseMap = useMemo(
     () => new Map(exercises.map((e) => [e.id, e])),
@@ -73,10 +87,10 @@ export function SocialFeedView() {
       {/* Cabeçalho */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+          <h1 className="text-2xl font-extrabold text-foreground tracking-tight">
             Meus Treinos
           </h1>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted-foreground">
             Histórico das suas sessões concluídas ({workoutHistory.length})
           </p>
         </div>
@@ -84,23 +98,27 @@ export function SocialFeedView() {
 
       {/* Estado Vazio ou Lista de Treinos do Usuário */}
       {workoutHistory.length === 0 ? (
-        <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-10 text-center space-y-4">
-          <Dumbbell className="w-10 h-10 text-slate-400 mx-auto" />
-          <div className="space-y-1">
-            <h3 className="text-base font-bold text-slate-900">
-              Nenhum treino registrado ainda
-            </h3>
-            <p className="text-xs text-slate-500 max-w-md mx-auto">
-              Assim que você finalizar seu primeiro treino, ele aparecerá aqui com todas as séries, volume, tempo e recordes pessoais.
-            </p>
-          </div>
-          <button
-            onClick={() => startEmptyWorkout('Treino Livre')}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#0084FF] hover:bg-blue-600 text-white text-xs font-bold transition"
-          >
-            <Play className="w-4 h-4 fill-current" /> Iniciar Primeiro Treino
-          </button>
-        </div>
+        <Card className="border-dashed">
+          <CardContent className="p-10 text-center space-y-4">
+            <Dumbbell className="w-10 h-10 text-muted-foreground mx-auto" />
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-foreground">
+                Nenhum treino registrado ainda
+              </h3>
+              <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                Assim que você finalizar seu primeiro treino, ele aparecerá aqui
+                com todas as séries, volume, tempo e recordes pessoais.
+              </p>
+            </div>
+            <Button
+              variant="default"
+              onClick={() => startEmptyWorkout('Treino Livre')}
+              className="rounded-full px-5 text-xs"
+            >
+              <Play className="w-4 h-4 fill-current" /> Iniciar Primeiro Treino
+            </Button>
+          </CardContent>
+        </Card>
       ) : (
         <div className="space-y-5">
           {workoutHistory.map((w) => {
@@ -114,320 +132,368 @@ export function SocialFeedView() {
             );
 
             return (
-              <div
-                key={w.id}
-                className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-xs"
-              >
-                {/* Topo do Card: Data/Hora + Ações compactas com área de toque >= 44x44px */}
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-[#3B82F6] shrink-0" />
-                    <span>
-                      {new Date(w.startTime).toLocaleDateString('pt-BR', {
-                        weekday: 'short',
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </span>
-                  </p>
-
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setAiReportSession(w)}
-                      title="Gerar Relatório de Treino para Avaliação por IA"
-                      aria-label="Relatório para IA"
-                      className="h-11 px-3 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-xs font-bold text-[#3B82F6] flex items-center gap-1.5 transition"
-                    >
-                      <Sparkles className="w-4 h-4" />
-                      <span>Relatório IA</span>
-                    </button>
-
-                    <button
-                      onClick={async () => {
-                        const token = encodeRoutineShareToken(
-                          w,
-                          exercises,
-                          settings.name
-                        );
-                        const url = buildShareUrl(token);
-                        await shareOrCopyLink({
-                          title: `Treino: ${w.title}`,
-                          text: `Confira e importe meu treino "${w.title}" no IronPulse:`,
-                          url,
-                        });
-                        setSharedSessionId(w.id);
-                        setTimeout(() => setSharedSessionId(null), 2500);
-                      }}
-                      title="Compartilhar Link deste Treino"
-                      aria-label="Compartilhar treino"
-                      className="h-11 px-3 rounded-xl bg-blue-50 hover:bg-blue-100 text-xs font-bold text-[#3B82F6] flex items-center gap-1.5 transition"
-                    >
-                      {sharedSessionId === w.id ? (
-                        <>
-                          <Check className="w-4 h-4 text-emerald-600" />{' '}
-                          <span>Copiado</span>
-                        </>
-                      ) : (
-                        <>
-                          <Share2 className="w-4 h-4" />{' '}
-                          <span>Compartilhar</span>
-                        </>
-                      )}
-                    </button>
-
-                    <button
-                      onClick={() => startEditWorkoutSession(w.id)}
-                      title="Alterar / Editar este treino"
-                      aria-label="Editar treino"
-                      className="h-11 px-3 rounded-xl bg-slate-100 hover:bg-blue-50 text-xs font-bold text-slate-700 hover:text-[#3B82F6] flex items-center gap-1.5 transition"
-                    >
-                      <Edit3 className="w-4 h-4" /> Editar
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        saveWorkoutSessionAsRoutine(w.id);
-                        setSavedToastId(w.id);
-                        setTimeout(() => setSavedToastId(null), 2500);
-                      }}
-                      title="Salvar como Rotina"
-                      aria-label="Salvar como rotina"
-                      className="h-11 px-3 rounded-xl bg-slate-100 hover:bg-blue-50 text-xs font-bold text-slate-700 hover:text-[#3B82F6] flex items-center gap-1.5 transition"
-                    >
-                      {savedToastId === w.id ? (
-                        <>
-                          <Check className="w-4 h-4 text-emerald-600" />{' '}
-                          <span>Salvo!</span>
-                        </>
-                      ) : (
-                        <>
-                          <BookmarkPlus className="w-4 h-4" />{' '}
-                          <span>Virar Rotina</span>
-                        </>
-                      )}
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        if (
-                          confirm(
-                            'Tem certeza que deseja excluir este treino do histórico?'
-                          )
-                        ) {
-                          deleteWorkoutSession(w.id);
-                        }
-                      }}
-                      title="Excluir Treino"
-                      aria-label="Excluir treino"
-                      className="w-11 h-11 rounded-xl bg-slate-100 hover:bg-red-50 text-slate-500 hover:text-red-500 flex items-center justify-center transition"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Título e Descrição */}
-                <div className="space-y-1">
-                  <h2 className="text-lg font-extrabold text-slate-900">
-                    {w.title}
-                  </h2>
-                  {w.description && (
-                    <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                      {w.description}
+              <Card key={w.id}>
+                <CardContent className="p-5 space-y-4">
+                  {/* Topo do Card: Data/Hora + Ações compactas com área de toque >= 44x44px */}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                      <span>
+                        {new Date(w.startTime).toLocaleDateString('pt-BR', {
+                          weekday: 'short',
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
                     </p>
-                  )}
-                </div>
 
-                {/* Métricas da Sessão */}
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 bg-slate-50 border border-slate-200/80 rounded-xl p-3">
-                  <div>
-                    <span className="text-[10px] uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-[#0084FF]" /> Tempo
-                    </span>
-                    <p className="text-sm font-extrabold text-[#0084FF] mt-0.5">
-                      {formatDuration(w.durationSeconds)}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                      <Dumbbell className="w-3 h-3 text-[#0084FF]" /> Volume
-                    </span>
-                    <p className="text-sm font-extrabold text-slate-900 mt-0.5">
-                      {convertVolumeFromKg(
-                        w.totalVolumeKg,
-                        weightUnit
-                      ).toLocaleString('pt-BR')}{' '}
-                      {unitLabel}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase tracking-wider text-slate-500">
-                      Séries
-                    </span>
-                    <p className="text-sm font-extrabold text-slate-900 mt-0.5">
-                      {w.totalSets} séries
-                    </p>
-                  </div>
-                  <div className="col-span-3 sm:col-span-1 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200">
-                    <span className="text-[10px] uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                      <Trophy className="w-3 h-3 text-amber-500" /> Recordes
-                    </span>
-                    <p className="text-sm font-extrabold text-amber-600 mt-0.5">
-                      {w.prCount} PRs
-                    </p>
-                  </div>
-                </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Button
+                        variant="outline"
+                        onClick={() => setAiReportSession(w)}
+                        title="Gerar Relatório de Treino para Avaliação por IA"
+                        aria-label="Relatório para IA"
+                        className="h-11 px-3 bg-primary/15 hover:bg-primary/25 border-primary/30 text-xs text-blue-600 dark:text-blue-400"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        <span>Relatório IA</span>
+                      </Button>
 
-                {/* Tags Musculares */}
-                {musclesTrained.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {musclesTrained.map((m) =>
-                      m ? (
-                        <span
-                          key={m}
-                          className="px-2.5 py-0.5 rounded-md bg-blue-50 text-[#0084FF] text-[11px] font-semibold"
-                        >
-                          {MUSCLE_LABELS[m]}
-                        </span>
-                      ) : null
+                      <Button
+                        variant="secondary"
+                        onClick={async () => {
+                          const token = encodeRoutineShareToken(
+                            w,
+                            exercises,
+                            settings.name
+                          );
+                          const url = buildShareUrl(token);
+                          const result = await shareOrCopyLink({
+                            title: `Treino: ${w.title}`,
+                            text: `Confira e importe meu treino "${w.title}" no IronPulse:`,
+                            url,
+                          });
+                          setSharedSessionId(w.id);
+                          setTimeout(() => setSharedSessionId(null), 2500);
+                          toast.success(
+                            result === 'shared'
+                              ? 'Treino compartilhado!'
+                              : 'Link do treino copiado!'
+                          );
+                        }}
+                        title="Compartilhar Link deste Treino"
+                        aria-label="Compartilhar treino"
+                        className="h-11 px-3 text-xs"
+                      >
+                        {sharedSessionId === w.id ? (
+                          <>
+                            <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                            <span>Copiado</span>
+                          </>
+                        ) : (
+                          <>
+                            <Share2 className="w-4 h-4" />
+                            <span className="hidden sm:inline">
+                              Compartilhar
+                            </span>
+                          </>
+                        )}
+                      </Button>
+
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          saveWorkoutSessionAsRoutine(w.id);
+                          toast.success('Treino salvo como rotina!');
+                        }}
+                        title="Salvar este treino como rotina reutilizável"
+                        aria-label="Virar Rotina"
+                        className="h-11 px-3 text-xs"
+                      >
+                        <BookmarkPlus className="w-4 h-4" />
+                        <span className="hidden sm:inline">Virar Rotina</span>
+                      </Button>
+
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="secondary"
+                            size="icon"
+                            title="Mais ações do treino"
+                            aria-label="Mais ações do treino"
+                          >
+                            <MoreHorizontal className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => startEditWorkoutSession(w.id)}
+                          >
+                            <Edit3 />
+                            <span>Editar treino</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              saveWorkoutSessionAsRoutine(w.id);
+                              toast.success('Treino salvo como rotina!');
+                            }}
+                          >
+                            <BookmarkPlus />
+                            <span>Virar Rotina</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onClick={() => setPendingDeleteSession(w)}
+                          >
+                            <Trash2 />
+                            <span>Excluir treino</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+
+                  {/* Título e Descrição */}
+                  <div className="space-y-1">
+                    <h2 className="text-lg font-extrabold text-foreground">
+                      {w.title}
+                    </h2>
+                    {w.description && (
+                      <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                        {w.description}
+                      </p>
                     )}
                   </div>
-                )}
 
-                {/* Lista de Exercícios e Séries */}
-                <div className="space-y-2 border-t border-slate-100 pt-3">
-                  {w.exercises.map((ex) => {
-                    const meta = exerciseMap.get(ex.exerciseId);
-                    const isTimeOrDistance =
-                      meta?.measurementType === 'duration' ||
-                      meta?.measurementType === 'distance_duration';
-                    const bestSet = ex.sets.reduce((best, cur) => {
-                      if (!best) return cur;
-                      if (meta?.measurementType === 'duration') {
-                        return (cur.durationSeconds ?? 0) >
-                          (best.durationSeconds ?? 0)
-                          ? cur
-                          : best;
-                      }
-                      if (meta?.measurementType === 'distance_duration') {
-                        return (cur.distanceKm ?? 0) > (best.distanceKm ?? 0)
-                          ? cur
-                          : best;
-                      }
-                      const cur1RM = calculate1RM(cur.weightKg, cur.reps);
-                      const best1RM = calculate1RM(best.weightKg, best.reps);
-                      if (cur1RM === best1RM) {
-                        return (cur.reps ?? 0) > (best.reps ?? 0) ? cur : best;
-                      }
-                      return cur1RM > best1RM ? cur : best;
-                    }, ex.sets[0]);
-                    const hasPR = ex.sets.some(
-                      (s) => s.prs && s.prs.length > 0
-                    );
+                  {/* Métricas da Sessão */}
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 bg-secondary/60 border border-border rounded-xl p-3">
+                    <div>
+                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-blue-600 dark:text-blue-400" />{' '}
+                        Tempo
+                      </span>
+                      <p className="text-sm font-extrabold text-blue-600 dark:text-blue-400 mt-0.5 tabular-nums">
+                        {formatDuration(w.durationSeconds)}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                        <Dumbbell className="w-3 h-3 text-blue-600 dark:text-blue-400" />{' '}
+                        Volume
+                      </span>
+                      <p className="text-sm font-extrabold text-foreground mt-0.5 tabular-nums">
+                        {convertVolumeFromKg(
+                          w.totalVolumeKg,
+                          weightUnit
+                        ).toLocaleString('pt-BR')}{' '}
+                        {unitLabel}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                        Séries
+                      </span>
+                      <p className="text-sm font-extrabold text-foreground mt-0.5 tabular-nums">
+                        {w.totalSets} séries
+                      </p>
+                    </div>
+                    <div className="col-span-3 sm:col-span-1 border-t sm:border-t-0 pt-2 sm:pt-0 border-border">
+                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                        <Trophy className="w-3 h-3 text-amber-500" /> Recordes
+                      </span>
+                      <p className="text-sm font-extrabold text-amber-600 dark:text-amber-400 mt-0.5 tabular-nums">
+                        {w.prCount} PRs
+                      </p>
+                    </div>
+                  </div>
 
-                    return (
-                      <div
-                        key={ex.id}
-                        className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 space-y-2"
-                      >
-                        <div className="flex items-center justify-between gap-2 text-xs">
-                          <div className="flex items-center gap-2 font-bold text-slate-900 min-w-0">
-                            <span className="text-[#0084FF] shrink-0">
-                              {ex.sets.length} séries
-                            </span>
-                            <span>•</span>
-                            <span className="truncate">
-                              {meta?.title || 'Exercício'}
-                            </span>
-                            {hasPR && (
-                              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300 text-[10px] font-extrabold flex items-center gap-1 shrink-0">
-                                <Award className="w-3 h-3" /> PR
+                  {/* Tags Musculares */}
+                  {musclesTrained.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {musclesTrained.map((m) =>
+                        m ? (
+                          <Badge
+                            key={m}
+                            variant="info"
+                            className="rounded-md text-[11px] font-semibold"
+                          >
+                            {MUSCLE_LABELS[m]}
+                          </Badge>
+                        ) : null
+                      )}
+                    </div>
+                  )}
+
+                  {/* Lista de Exercícios e Séries */}
+                  <div className="space-y-2 border-t border-border pt-3">
+                    {w.exercises.map((ex) => {
+                      const meta = exerciseMap.get(ex.exerciseId);
+                      const isTimeOrDistance =
+                        meta?.measurementType === 'duration' ||
+                        meta?.measurementType === 'distance_duration';
+                      const bestSet = ex.sets.reduce((best, cur) => {
+                        if (!best) return cur;
+                        if (meta?.measurementType === 'duration') {
+                          return (cur.durationSeconds ?? 0) >
+                            (best.durationSeconds ?? 0)
+                            ? cur
+                            : best;
+                        }
+                        if (meta?.measurementType === 'distance_duration') {
+                          return (cur.distanceKm ?? 0) > (best.distanceKm ?? 0)
+                            ? cur
+                            : best;
+                        }
+                        const cur1RM = calculate1RM(cur.weightKg, cur.reps);
+                        const best1RM = calculate1RM(best.weightKg, best.reps);
+                        if (cur1RM === best1RM) {
+                          return (cur.reps ?? 0) > (best.reps ?? 0)
+                            ? cur
+                            : best;
+                        }
+                        return cur1RM > best1RM ? cur : best;
+                      }, ex.sets[0]);
+                      const hasPR = ex.sets.some(
+                        (s) => s.prs && s.prs.length > 0
+                      );
+
+                      return (
+                        <div
+                          key={ex.id}
+                          className="bg-secondary/60 border border-border rounded-xl p-3 space-y-2"
+                        >
+                          <div className="flex items-center justify-between gap-2 text-xs">
+                            <div className="flex items-center gap-2 font-bold text-foreground min-w-0">
+                              <span className="text-blue-600 dark:text-blue-400 shrink-0 tabular-nums">
+                                {ex.sets.length} séries
+                              </span>
+                              <span className="text-muted-foreground">•</span>
+                              <span className="truncate">
+                                {meta?.title || 'Exercício'}
+                              </span>
+                              {hasPR && (
+                                <Badge
+                                  variant="warning"
+                                  className="px-2 py-0.5 text-[10px] font-extrabold shrink-0"
+                                >
+                                  <Award className="w-3 h-3" /> PR
+                                </Badge>
+                              )}
+                            </div>
+                            {bestSet && (
+                              <span className="text-muted-foreground font-semibold shrink-0 tabular-nums">
+                                Melhor:{' '}
+                                {formatSetSummary(
+                                  bestSet,
+                                  meta?.measurementType,
+                                  weightUnit
+                                )}
                               </span>
                             )}
                           </div>
-                          {bestSet && (
-                            <span className="text-slate-600 font-semibold shrink-0">
-                              Melhor:{' '}
-                              {formatSetSummary(
-                                bestSet,
-                                meta?.measurementType,
-                                weightUnit
-                              )}
-                            </span>
+
+                          {isExpanded && (
+                            <div className="space-y-1 pt-2 border-t border-border">
+                              {ex.sets.map((s, sIdx) => {
+                                const est1rm = calculate1RM(s.weightKg, s.reps);
+                                return (
+                                  <div
+                                    key={s.id}
+                                    className="flex items-center justify-between text-[11px] text-foreground px-2.5 py-1.5 rounded-lg bg-card border border-border"
+                                  >
+                                    <span>
+                                      Série{' '}
+                                      {s.type === 'warmup'
+                                        ? 'W'
+                                        : s.type === 'dropset'
+                                        ? 'D'
+                                        : s.type === 'failure'
+                                        ? 'F'
+                                        : sIdx + 1}
+                                      :{' '}
+                                      <strong className="tabular-nums">
+                                        {formatSetSummary(
+                                          s,
+                                          meta?.measurementType,
+                                          weightUnit
+                                        )}
+                                      </strong>
+                                    </span>
+                                    {!isTimeOrDistance && est1rm > 0 && (
+                                      <span className="text-muted-foreground tabular-nums">
+                                        1RM:{' '}
+                                        {formatWeightWithUnit(
+                                          est1rm,
+                                          weightUnit
+                                        )}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           )}
                         </div>
+                      );
+                    })}
 
-                        {isExpanded && (
-                          <div className="space-y-1 pt-2 border-t border-slate-200">
-                            {ex.sets.map((s, sIdx) => {
-                              const est1rm = calculate1RM(s.weightKg, s.reps);
-                              return (
-                                <div
-                                  key={s.id}
-                                  className="flex items-center justify-between text-[11px] text-slate-700 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200/60"
-                                >
-                                  <span>
-                                    Série{' '}
-                                    {s.type === 'warmup'
-                                      ? 'W'
-                                      : s.type === 'dropset'
-                                      ? 'D'
-                                      : s.type === 'failure'
-                                      ? 'F'
-                                      : sIdx + 1}
-                                    :{' '}
-                                    <strong>
-                                      {formatSetSummary(
-                                        s,
-                                        meta?.measurementType,
-                                        weightUnit
-                                      )}
-                                    </strong>
-                                  </span>
-                                  {!isTimeOrDistance && est1rm > 0 && (
-                                    <span className="text-slate-500">
-                                      1RM:{' '}
-                                      {formatWeightWithUnit(est1rm, weightUnit)}
-                                    </span>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                    <div className="flex items-center justify-between gap-2 pt-1">
+                      <Button
+                        variant="link"
+                        onClick={() => toggleExpand(w.id)}
+                        className="px-2 text-xs text-blue-600 dark:text-blue-400"
+                      >
+                        {isExpanded
+                          ? 'Ocultar detalhes das séries'
+                          : 'Ver todas as séries detalhadas'}
+                      </Button>
 
-                  <div className="flex items-center justify-between pt-1">
-                    <button
-                      onClick={() => toggleExpand(w.id)}
-                      className="min-h-[44px] px-2 text-xs font-bold text-[#3B82F6] hover:underline flex items-center"
-                    >
-                      {isExpanded
-                        ? 'Ocultar detalhes das séries'
-                        : 'Ver todas as séries detalhadas'}
-                    </button>
-
-                    <button
-                      onClick={() =>
-                        startWorkoutFromExercises(w.title, w.exercises)
-                      }
-                      className="min-h-[44px] px-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-700 hover:underline flex items-center gap-1.5"
-                    >
-                      <Play className="w-3.5 h-3.5 fill-current" /> Repetir Treino
-                    </button>
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          startWorkoutFromExercises(w.title, w.exercises)
+                        }
+                        className="h-11 px-3 bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/30 text-xs text-emerald-700 dark:text-emerald-400"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-current" /> Repetir
+                        Treino
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             );
           })}
         </div>
       )}
+
+      {/* Confirmação acessível para exclusão de treino */}
+      <ConfirmDialog
+        open={Boolean(pendingDeleteSession)}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeleteSession(null);
+        }}
+        title="Excluir treino do histórico?"
+        description={
+          pendingDeleteSession
+            ? `Tem certeza que deseja excluir "${pendingDeleteSession.title}"? Essa ação não pode ser desfeita.`
+            : undefined
+        }
+        confirmLabel="Excluir"
+        cancelLabel="Cancelar"
+        variant="destructive"
+        onConfirm={() => {
+          if (pendingDeleteSession) {
+            deleteWorkoutSession(pendingDeleteSession.id);
+            toast.success('Treino excluído do histórico.');
+            setPendingDeleteSession(null);
+          }
+        }}
+      />
 
       {/* Modal de Relatório de Treino para Avaliação por IA */}
       <WorkoutAIReportModal

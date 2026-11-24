@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Bookmark,
   Check,
@@ -10,6 +10,7 @@ import {
   Utensils,
   X,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   MEAL_SLOT_LABELS,
   MEAL_SLOTS_ORDER,
@@ -17,6 +18,26 @@ import {
   SavedMeal,
 } from '@/types/nutrition';
 import { useNutritionStore } from '@/store/useNutritionStore';
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '@/components/ui/responsive-dialog';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 interface SavedMealsModalProps {
   isOpen: boolean;
@@ -43,8 +64,13 @@ export function SavedMealsModal({
   const [targetSlot, setTargetSlot] = useState<MealSlot>(defaultSlot);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
+  const [mealToDelete, setMealToDelete] = useState<SavedMeal | null>(null);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (isOpen) {
+      setTargetSlot(defaultSlot);
+    }
+  }, [isOpen, defaultSlot]);
 
   const getMealTotals = (meal: SavedMeal) => {
     let calories = 0;
@@ -63,217 +89,241 @@ export function SavedMealsModal({
   const handleLog = (meal: SavedMeal) => {
     const count = logSavedMeal(meal.id, date, targetSlot);
     if (count > 0) {
-      onLogged?.(meal.name, count, targetSlot);
+      if (onLogged) {
+        onLogged(meal.name, count, targetSlot);
+      } else {
+        toast.success(
+          `Combo "${meal.name}" (${count} itens) lançado em ${MEAL_SLOT_LABELS[targetSlot]}!`
+        );
+      }
       onClose();
     }
   };
 
   const handleSaveRename = (mealId: string) => {
-    if (editingName.trim()) {
-      renameSavedMeal(mealId, editingName.trim());
+    const trimmed = editingName.trim();
+    if (trimmed) {
+      renameSavedMeal(mealId, trimmed);
+      toast.success(`Combo renomeado para "${trimmed}"!`);
     }
     setEditingId(null);
     setEditingName('');
   };
 
   return (
-    <div
-      onClick={onClose}
-      className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center bg-black/65 backdrop-blur-sm p-2 sm:p-4"
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="saved-meals-modal-title"
-        className="bg-white border border-slate-200 rounded-3xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl"
+    <>
+      <ResponsiveDialog
+        open={isOpen}
+        onOpenChange={(open) => {
+          if (!open) onClose();
+        }}
       >
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200 text-[#3B82F6] flex items-center justify-center shrink-0">
-              <Bookmark className="w-5 h-5" />
+        <ResponsiveDialogContent className="sm:max-w-xl">
+          <ResponsiveDialogHeader className="shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-primary/30 bg-primary/15 text-blue-600 dark:text-blue-400">
+                <Bookmark className="size-5" />
+              </div>
+              <div className="min-w-0">
+                <ResponsiveDialogTitle className="truncate">
+                  Refeições Salvas &amp; Combos
+                </ResponsiveDialogTitle>
+                <ResponsiveDialogDescription>
+                  Lance suas combinações favoritas em 1 toque
+                </ResponsiveDialogDescription>
+              </div>
             </div>
-            <div className="min-w-0">
-              <h2
-                id="saved-meals-modal-title"
-                className="text-base sm:text-lg font-extrabold text-slate-900 truncate"
+          </ResponsiveDialogHeader>
+
+          {/* Seletor de Refeição Destino */}
+          <div className="shrink-0 space-y-1.5 border-b border-border bg-secondary/40 px-5 py-3">
+            <Label htmlFor="saved-meals-target-slot">Lançar combo em:</Label>
+            <Select
+              value={targetSlot}
+              onValueChange={(val) => setTargetSlot(val as MealSlot)}
+            >
+              <SelectTrigger
+                id="saved-meals-target-slot"
+                aria-label="Selecionar refeição destino"
               >
-                Refeições Salvas & Combos
-              </h2>
-              <p className="text-xs text-slate-500">
-                Lance suas combinações favoritas em 1 toque
-              </p>
-            </div>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MEAL_SLOTS_ORDER.map((slot) => (
+                  <SelectItem key={slot} value={slot}>
+                    {MEAL_SLOT_LABELS[slot]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Fechar refeições salvas"
-            className="w-11 h-11 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center shrink-0 transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+          {/* Lista de Combos */}
+          <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
+            {savedMeals.length === 0 ? (
+              <Card className="space-y-3 border-dashed bg-secondary/40 px-4 py-10 text-center">
+                <Utensils className="mx-auto size-9 text-muted-foreground" />
+                <h3 className="text-sm font-bold text-foreground">
+                  Nenhum combo salvo ainda
+                </h3>
+                <p className="mx-auto max-w-sm text-xs leading-relaxed text-muted-foreground">
+                  Adicione 2 ou mais alimentos em qualquer refeição do seu
+                  diário e toque em{' '}
+                  <strong className="text-foreground">
+                    &ldquo;Salvar combo&rdquo;
+                  </strong>{' '}
+                  para reutilizar no dia seguinte em 1 toque.
+                </p>
+              </Card>
+            ) : (
+              savedMeals.map((meal) => {
+                const totals = getMealTotals(meal);
+                const isEditing = editingId === meal.id;
 
-        {/* Seletor de Refeição Destino */}
-        <div className="px-5 py-3 bg-slate-50 border-b border-slate-200 space-y-1.5 shrink-0">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-            Lançar combo em:
-          </span>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-            {MEAL_SLOTS_ORDER.map((slot) => (
-              <button
-                key={slot}
-                type="button"
-                onClick={() => setTargetSlot(slot)}
-                className={`min-h-[40px] px-2.5 py-1.5 rounded-xl text-xs font-bold transition ${
-                  targetSlot === slot
-                    ? 'bg-[#2563EB] text-white shadow-xs'
-                    : 'bg-white border border-slate-200 text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {MEAL_SLOT_LABELS[slot]}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Lista de Combos */}
-        <div className="p-4 sm:p-5 overflow-y-auto space-y-3 flex-1">
-          {savedMeals.length === 0 ? (
-            <div className="py-10 px-4 text-center space-y-3 bg-slate-50 border border-dashed border-slate-300 rounded-2xl">
-              <Utensils className="w-9 h-9 text-slate-400 mx-auto" />
-              <h3 className="text-sm font-bold text-slate-900">
-                Nenhum combo salvo ainda
-              </h3>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
-                Adicione 2 ou mais alimentos em qualquer refeição do seu diário e
-                toque em <strong>&ldquo;Salvar combo&rdquo;</strong> para
-                reutilizar no dia seguinte em 1 toque.
-              </p>
-            </div>
-          ) : (
-            savedMeals.map((meal) => {
-              const totals = getMealTotals(meal);
-              const isEditing = editingId === meal.id;
-
-              return (
-                <div
-                  key={meal.id}
-                  className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    {isEditing ? (
-                      <form
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          handleSaveRename(meal.id);
-                        }}
-                        className="flex-1 flex items-center gap-2"
-                      >
-                        <input
-                          type="text"
-                          value={editingName}
-                          onChange={(e) => setEditingName(e.target.value)}
-                          autoFocus
-                          aria-label="Novo nome do combo"
-                          className="flex-1 h-11 px-3 rounded-xl bg-white border border-[#3B82F6] text-base font-bold text-slate-900 focus:outline-none"
-                        />
-                        <button
-                          type="submit"
-                          aria-label="Confirmar nome"
-                          className="w-11 h-11 rounded-xl bg-[#2563EB] text-white flex items-center justify-center shrink-0"
-                        >
-                          <Check className="w-4 h-4" />
-                        </button>
-                      </form>
-                    ) : (
-                      <div className="min-w-0">
-                        <h3 className="text-sm font-extrabold text-slate-900 truncate">
-                          {meal.name}
-                        </h3>
-                        <p className="text-xs text-slate-500 mt-0.5 tabular-nums">
-                          <strong className="text-slate-900">
-                            {totals.calories} kcal
-                          </strong>{' '}
-                          • P: {fmt1(totals.proteinG)}g • C:{' '}
-                          {fmt1(totals.carbsG)}g • G: {fmt1(totals.fatG)}g
-                        </p>
-                      </div>
-                    )}
-
-                    {!isEditing && (
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          aria-label={`Renomear ${meal.name}`}
-                          onClick={() => {
-                            setEditingId(meal.id);
-                            setEditingName(meal.name);
-                          }}
-                          className="w-11 h-11 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 flex items-center justify-center transition"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={`Excluir ${meal.name}`}
-                          onClick={() => {
-                            if (
-                              confirm(
-                                `Deseja excluir a refeição salva "${meal.name}"?`
-                              )
-                            ) {
-                              deleteSavedMeal(meal.id);
-                            }
-                          }}
-                          className="w-11 h-11 rounded-xl bg-white border border-slate-200 hover:bg-red-50 text-slate-500 hover:text-red-500 flex items-center justify-center transition"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <ul className="space-y-1 text-xs text-slate-600">
-                    {meal.items.map((item, idx) => (
-                      <li
-                        key={`${meal.id}-item-${idx}`}
-                        className="flex items-center justify-between gap-2"
-                      >
-                        <span className="truncate">
-                          • {item.foodName}{' '}
-                          <span className="text-slate-400">
-                            (
-                            {item.measureMode === 'unit' && item.unitLabel
-                              ? `${fmt1(item.quantity)} × ${item.unitLabel}`
-                              : `${fmt1(item.totalGrams)}g`}
-                            )
-                          </span>
-                        </span>
-                        <span className="font-semibold text-slate-700 shrink-0 tabular-nums">
-                          {item.calories} kcal
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  <button
-                    type="button"
-                    onClick={() => handleLog(meal)}
-                    className="w-full h-11 px-4 rounded-xl bg-[#2563EB] hover:bg-blue-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-xs"
+                return (
+                  <Card
+                    key={meal.id}
+                    className="space-y-3 bg-secondary/40 p-4"
                   >
-                    <Plus className="w-4 h-4" />
-                    Lançar em {MEAL_SLOT_LABELS[targetSlot]} ({meal.items.length}{' '}
-                    {meal.items.length === 1 ? 'item' : 'itens'})
-                  </button>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-    </div>
+                    <div className="flex items-start justify-between gap-2">
+                      {isEditing ? (
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            handleSaveRename(meal.id);
+                          }}
+                          className="flex flex-1 items-center gap-2"
+                        >
+                          <Input
+                            type="text"
+                            value={editingName}
+                            onChange={(e) => setEditingName(e.target.value)}
+                            autoFocus
+                            aria-label="Novo nome do combo"
+                            className="flex-1 border-primary bg-background font-bold"
+                          />
+                          <Button
+                            type="submit"
+                            size="icon"
+                            aria-label="Confirmar nome"
+                            className="shrink-0"
+                          >
+                            <Check className="size-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            aria-label="Cancelar renomeação"
+                            onClick={() => {
+                              setEditingId(null);
+                              setEditingName('');
+                            }}
+                            className="shrink-0"
+                          >
+                            <X className="size-4" />
+                          </Button>
+                        </form>
+                      ) : (
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="truncate text-sm font-extrabold text-foreground">
+                              {meal.name}
+                            </h3>
+                            <Badge variant="info" className="tabular-nums">
+                              {totals.calories} kcal
+                            </Badge>
+                          </div>
+                          <p className="text-xs tabular-nums text-muted-foreground">
+                            P: {fmt1(totals.proteinG)}g • C:{' '}
+                            {fmt1(totals.carbsG)}g • G: {fmt1(totals.fatG)}g
+                          </p>
+                        </div>
+                      )}
+
+                      {!isEditing && (
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            aria-label={`Renomear ${meal.name}`}
+                            onClick={() => {
+                              setEditingId(meal.id);
+                              setEditingName(meal.name);
+                            }}
+                          >
+                            <Edit3 className="size-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            aria-label={`Excluir ${meal.name}`}
+                            onClick={() => setMealToDelete(meal)}
+                            className="text-muted-foreground hover:border-destructive/40 hover:bg-destructive/15 hover:text-destructive"
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+
+                    <ul className="space-y-1 text-xs text-muted-foreground">
+                      {meal.items.map((item, idx) => (
+                        <li
+                          key={`${meal.id}-item-${idx}`}
+                          className="flex items-center justify-between gap-2"
+                        >
+                          <span className="truncate text-foreground/90">
+                            • {item.foodName}{' '}
+                            <span className="text-muted-foreground">
+                              (
+                              {item.measureMode === 'unit' && item.unitLabel
+                                ? `${fmt1(item.quantity)} × ${item.unitLabel}`
+                                : `${fmt1(item.totalGrams)}g`}
+                              )
+                            </span>
+                          </span>
+                          <span className="shrink-0 font-semibold tabular-nums text-foreground">
+                            {item.calories} kcal
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+
+                    <Button
+                      onClick={() => handleLog(meal)}
+                      className="w-full text-xs"
+                    >
+                      <Plus className="size-4" />
+                      Lançar em {MEAL_SLOT_LABELS[targetSlot]} (
+                      {meal.items.length}{' '}
+                      {meal.items.length === 1 ? 'item' : 'itens'})
+                    </Button>
+                  </Card>
+                );
+              })
+            )}
+          </div>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
+
+      <ConfirmDialog
+        open={mealToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setMealToDelete(null);
+        }}
+        title="Excluir refeição salva?"
+        description={`Deseja excluir a refeição salva "${mealToDelete?.name ?? ''}"? Esta ação não pode ser desfeita.`}
+        confirmLabel="Excluir"
+        cancelLabel="Cancelar"
+        variant="destructive"
+        onConfirm={() => {
+          if (mealToDelete) {
+            deleteSavedMeal(mealToDelete.id);
+            toast.success(`Combo "${mealToDelete.name}" excluído.`);
+            setMealToDelete(null);
+          }
+        }}
+      />
+    </>
   );
 }

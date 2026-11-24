@@ -1,14 +1,8 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import {
-  Check,
-  Copy,
-  RotateCcw,
-  Share2,
-  Sparkles,
-  X,
-} from 'lucide-react';
+import { Check, Copy, RotateCcw, Share2, Sparkles } from 'lucide-react';
+import { toast } from 'sonner';
 import { WorkoutSession } from '@/types/workout';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import { useNutritionStore } from '@/store/useNutritionStore';
@@ -18,6 +12,18 @@ import {
   generateWorkoutAIReport,
   shareOrCopyReportText,
 } from '@/lib/ai-report';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '@/components/ui/responsive-dialog';
+import { Textarea } from '@/components/ui/textarea';
 
 interface WorkoutAIReportModalProps {
   session: WorkoutSession | null;
@@ -40,9 +46,9 @@ export function WorkoutAIReportModal({
   const nutritionProfile = useNutritionStore((s) => s.profile);
 
   const [copyFeedback, setCopyFeedback] = useState(false);
-  const [shareFeedback, setShareFeedback] = useState<'shared' | 'copied' | null>(
-    null
-  );
+  const [shareFeedback, setShareFeedback] = useState<
+    'shared' | 'copied' | null
+  >(null);
 
   const activePrompt = settings.aiReportPrompt ?? DEFAULT_AI_REPORT_PROMPT;
   const isPromptModified =
@@ -92,7 +98,10 @@ export function WorkoutAIReportModal({
     const ok = await copyReportText(reportMarkdown);
     if (ok) {
       setCopyFeedback(true);
+      toast.success('Relatório copiado para a área de transferência!');
       setTimeout(() => setCopyFeedback(false), 2500);
+    } else {
+      toast.error('Não foi possível copiar o relatório.');
     }
   };
 
@@ -103,75 +112,62 @@ export function WorkoutAIReportModal({
     });
     if (result === 'shared' || result === 'copied') {
       setShareFeedback(result);
+      toast.success(
+        result === 'shared'
+          ? 'Relatório compartilhado!'
+          : 'Relatório copiado para enviar!'
+      );
       setTimeout(() => setShareFeedback(null), 2500);
     }
   };
 
   return (
-    <div
-      onClick={onClose}
-      className="fixed inset-0 z-[85] flex items-end sm:items-center justify-center bg-black/65 backdrop-blur-sm p-2 sm:p-4"
+    <ResponsiveDialog
+      open={Boolean(session)}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="ai-report-modal-title"
-        className="bg-white border border-slate-200 rounded-3xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden shadow-2xl"
-      >
+      <ResponsiveDialogContent className="sm:max-w-2xl">
         {/* Cabeçalho */}
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3 shrink-0">
+        <ResponsiveDialogHeader>
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200 text-[#3B82F6] flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-primary/15 border border-primary/30 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
               <Sparkles className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <h2
-                id="ai-report-modal-title"
-                className="text-base sm:text-lg font-extrabold text-slate-900 truncate"
-              >
+              <ResponsiveDialogTitle className="text-base sm:text-lg truncate">
                 Relatório para Avaliação IA
-              </h2>
-              <p className="text-xs text-slate-500 truncate">
+              </ResponsiveDialogTitle>
+              <ResponsiveDialogDescription className="truncate">
                 {session.title} • {formattedSessionDate}
-              </p>
+              </ResponsiveDialogDescription>
             </div>
           </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Fechar relatório para IA"
-            className="w-11 h-11 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center shrink-0 transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+        </ResponsiveDialogHeader>
 
         {/* Conteúdo Rolável: Prompt Editável + Prévia Markdown */}
-        <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1">
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {/* Bloco 1: Prompt Editável */}
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <label
-                htmlFor="ai-report-prompt-input"
-                className="text-xs font-bold uppercase tracking-wider text-slate-600"
-              >
+              <Label htmlFor="ai-report-prompt-input">
                 Prompt para a IA (salvo automaticamente)
-              </label>
+              </Label>
               {isPromptModified && (
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={() =>
                     updateSettings({ aiReportPrompt: DEFAULT_AI_REPORT_PROMPT })
                   }
-                  className="min-h-[36px] px-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-bold text-[#3B82F6] flex items-center gap-1 transition"
+                  className="min-h-11 h-11 text-blue-600 dark:text-blue-400"
                 >
                   <RotateCcw className="w-3.5 h-3.5" /> Restaurar padrão
-                </button>
+                </Button>
               )}
             </div>
-            <textarea
+            <Textarea
               id="ai-report-prompt-input"
               rows={4}
               value={activePrompt}
@@ -179,23 +175,21 @@ export function WorkoutAIReportModal({
                 updateSettings({ aiReportPrompt: e.target.value })
               }
               placeholder="Instruções de como você quer que a IA avalie o seu treino..."
-              className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-900 placeholder-slate-400 leading-relaxed focus:outline-none focus:border-[#3B82F6]"
+              className="leading-relaxed"
             />
           </div>
 
           {/* Bloco 2: Prévia em Markdown */}
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
-                Prévia do Relatório (Markdown)
-              </span>
-              <span className="text-[11px] text-slate-500 tabular-nums">
+              <Label>Prévia do Relatório (Markdown)</Label>
+              <Badge variant="secondary" className="text-[11px] tabular-nums">
                 {reportMarkdown.length.toLocaleString('pt-BR')} caracteres
-              </span>
+              </Badge>
             </div>
             <pre
               data-testid="ai-report-preview"
-              className="w-full max-h-72 overflow-y-auto p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 whitespace-pre-wrap font-mono leading-relaxed select-all"
+              className="w-full max-h-72 overflow-y-auto p-3.5 rounded-xl bg-secondary/60 border border-border text-xs text-foreground whitespace-pre-wrap font-mono leading-relaxed select-all"
             >
               {reportMarkdown}
             </pre>
@@ -203,11 +197,12 @@ export function WorkoutAIReportModal({
         </div>
 
         {/* Rodapé com Ações: Copiar + Compartilhar Nativo */}
-        <div className="p-4 border-t border-slate-100 bg-white grid grid-cols-1 sm:grid-cols-2 gap-2.5 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
-          <button
-            type="button"
+        <ResponsiveDialogFooter className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <Button
+            variant="default"
+            size="lg"
             onClick={handleCopy}
-            className="h-12 px-4 rounded-xl bg-[#2563EB] hover:bg-blue-600 text-white text-sm font-bold flex items-center justify-center gap-2 shadow-sm transition"
+            className="w-full text-sm"
           >
             {copyFeedback ? (
               <>
@@ -220,17 +215,22 @@ export function WorkoutAIReportModal({
                 <span>Copiar Relatório</span>
               </>
             )}
-          </button>
+          </Button>
 
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="lg"
             onClick={handleShare}
-            className="h-12 px-4 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#3B82F6] text-sm font-bold flex items-center justify-center gap-2 transition"
+            className={
+              shareFeedback
+                ? 'w-full text-sm bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/30 text-emerald-700 dark:text-emerald-400'
+                : 'w-full text-sm bg-primary/15 hover:bg-primary/25 border-primary/30 text-blue-600 dark:text-blue-400'
+            }
           >
             {shareFeedback ? (
               <>
-                <Check className="w-4 h-4 text-emerald-600 stroke-[2.5]" />
-                <span className="text-emerald-700">
+                <Check className="w-4 h-4 stroke-[2.5]" />
+                <span>
                   {shareFeedback === 'shared'
                     ? 'Compartilhado!'
                     : 'Copiado para enviar!'}
@@ -242,9 +242,9 @@ export function WorkoutAIReportModal({
                 <span>Compartilhar</span>
               </>
             )}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

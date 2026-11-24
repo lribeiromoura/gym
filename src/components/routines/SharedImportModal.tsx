@@ -1,18 +1,32 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import {
-  Check,
-  Download,
-  Dumbbell,
-  Folder,
-  Play,
-  Share2,
-  X,
-} from 'lucide-react';
+import { Check, Download, Dumbbell, Folder, Play, Share2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { MUSCLE_LABELS } from '@/types/workout';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import { SharePayload } from '@/lib/share';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '@/components/ui/responsive-dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
+const ROOT_FOLDER_VALUE = '__root__';
 
 interface SharedImportModalProps {
   payload: SharePayload | null;
@@ -29,7 +43,8 @@ export function SharedImportModal({
   const folders = useWorkoutStore((s) => s.folders);
   const importSharedPayload = useWorkoutStore((s) => s.importSharedPayload);
 
-  const [selectedFolderId, setSelectedFolderId] = useState<string>('');
+  const [selectedFolderId, setSelectedFolderId] =
+    useState<string>(ROOT_FOLDER_VALUE);
   const [importedSuccess, setImportedSuccess] = useState(false);
 
   const exerciseMap = useMemo(() => {
@@ -64,11 +79,23 @@ export function SharedImportModal({
   );
 
   const handleImport = (startImmediately = false) => {
+    const targetFolderId =
+      isFolder || selectedFolderId === ROOT_FOLDER_VALUE
+        ? null
+        : selectedFolderId;
+
     importSharedPayload(payload, {
       startImmediately,
-      targetFolderId: isFolder ? null : selectedFolderId || null,
+      targetFolderId,
     });
     setImportedSuccess(true);
+    toast.success(
+      isFolder
+        ? `Pasta "${payload.fn || 'Compartilhada'}" importada com ${totalRoutines} rotinas!`
+        : startImmediately
+        ? 'Treino importado e iniciado!'
+        : 'Rotina adicionada às suas rotinas!'
+    );
     setTimeout(() => {
       setImportedSuccess(false);
       onImported();
@@ -76,181 +103,198 @@ export function SharedImportModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 animate-fadeIn">
-      <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+    <ResponsiveDialog
+      open={Boolean(payload)}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <ResponsiveDialogContent className="sm:max-w-xl">
         {/* Topo do Modal */}
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-blue-50 text-[#0084FF] flex items-center justify-center shrink-0">
+        <ResponsiveDialogHeader>
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-full bg-primary/15 border border-primary/30 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
               {isFolder ? (
                 <Folder className="w-5 h-5" />
               ) : (
                 <Share2 className="w-5 h-5" />
               )}
             </div>
-            <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-[#0084FF] block">
+            <div className="min-w-0">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 block">
                 {isFolder
                   ? 'Pasta de Treinos Compartilhada'
                   : 'Treino Compartilhado'}
               </span>
-              <h2 className="text-lg font-extrabold text-slate-900">
+              <ResponsiveDialogTitle className="text-lg truncate">
                 {isFolder ? payload.fn : payload.r[0]?.t || 'Treino'}
-              </h2>
+              </ResponsiveDialogTitle>
+              <ResponsiveDialogDescription
+                className={payload.by ? undefined : 'sr-only'}
+              >
+                {payload.by ? (
+                  <>
+                    Compartilhado por{' '}
+                    <strong className="text-foreground">{payload.by}</strong>
+                  </>
+                ) : isFolder ? (
+                  'Prévia e importação de pasta de treinos compartilhada'
+                ) : (
+                  'Prévia e importação de treino compartilhado'
+                )}
+              </ResponsiveDialogDescription>
             </div>
           </div>
-
-          <button
-            onClick={onClose}
-            className="p-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+        </ResponsiveDialogHeader>
 
         {/* Corpo com Prévia dos Exercícios e Séries */}
-        <div className="p-5 overflow-y-auto space-y-4 flex-1">
-          {payload.by && (
-            <p className="text-xs text-slate-500">
-              Compartilhado por{' '}
-              <strong className="text-slate-800">{payload.by}</strong>
-            </p>
-          )}
-
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {/* Resumo Rápido */}
-          <div className="grid grid-cols-3 gap-2.5 bg-slate-50 border border-slate-200 rounded-2xl p-3 text-center">
-            <div>
-              <span className="text-[11px] text-slate-500 block">
-                {isFolder ? 'Rotinas' : 'Exercícios'}
-              </span>
-              <span className="text-base font-extrabold text-slate-900">
-                {isFolder ? totalRoutines : totalExercises}
-              </span>
-            </div>
-            <div>
-              <span className="text-[11px] text-slate-500 block">
-                Total de Séries
-              </span>
-              <span className="text-base font-extrabold text-[#0084FF]">
-                {totalSets}
-              </span>
-            </div>
-            <div>
-              <span className="text-[11px] text-slate-500 block">
-                Exercícios Novos
-              </span>
-              <span className="text-base font-extrabold text-slate-900">
-                {payload.ce?.length || 0}
-              </span>
-            </div>
-          </div>
+          <Card className="bg-secondary/60 shadow-none">
+            <CardContent className="p-3 grid grid-cols-3 gap-2.5 text-center">
+              <div>
+                <span className="text-[11px] text-muted-foreground block">
+                  {isFolder ? 'Rotinas' : 'Exercícios'}
+                </span>
+                <span className="text-base font-extrabold text-foreground tabular-nums">
+                  {isFolder ? totalRoutines : totalExercises}
+                </span>
+              </div>
+              <div>
+                <span className="text-[11px] text-muted-foreground block">
+                  Total de Séries
+                </span>
+                <span className="text-base font-extrabold text-blue-600 dark:text-blue-400 tabular-nums">
+                  {totalSets}
+                </span>
+              </div>
+              <div>
+                <span className="text-[11px] text-muted-foreground block">
+                  Exercícios Novos
+                </span>
+                <span className="text-base font-extrabold text-foreground tabular-nums">
+                  {payload.ce?.length || 0}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Lista detalhada de cada rotina compartilhada */}
           <div className="space-y-4">
             {payload.r.map((routine, rIdx) => (
-              <div
-                key={rIdx}
-                className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3"
-              >
-                {isFolder && (
-                  <div className="border-b border-slate-200 pb-2">
-                    <h3 className="text-sm font-extrabold text-slate-900">
-                      {routine.t}
-                    </h3>
-                    {routine.d && (
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        {routine.d}
-                      </p>
-                    )}
-                  </div>
-                )}
+              <Card key={rIdx} className="bg-secondary/40 shadow-none">
+                <CardContent className="p-4 space-y-3">
+                  {isFolder && (
+                    <div className="border-b border-border pb-2">
+                      <h3 className="text-sm font-extrabold text-foreground">
+                        {routine.t}
+                      </h3>
+                      {routine.d && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {routine.d}
+                        </p>
+                      )}
+                    </div>
+                  )}
 
-                {!isFolder && routine.d && (
-                  <p className="text-xs text-slate-600">{routine.d}</p>
-                )}
+                  {!isFolder && routine.d && (
+                    <p className="text-xs text-muted-foreground">{routine.d}</p>
+                  )}
 
-                <div className="space-y-2">
-                  {routine.ex.map((ex, exIdx) => {
-                    const meta = exerciseMap.get(ex.e);
-                    return (
-                      <div
-                        key={exIdx}
-                        className="bg-white border border-slate-200/80 rounded-xl p-3 space-y-1.5"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <Dumbbell className="w-4 h-4 text-[#0084FF] shrink-0" />
-                            <span className="text-xs sm:text-sm font-bold text-slate-900 truncate">
-                              {meta?.title || 'Exercício'}
-                            </span>
+                  <div className="space-y-2">
+                    {routine.ex.map((ex, exIdx) => {
+                      const meta = exerciseMap.get(ex.e);
+                      return (
+                        <div
+                          key={exIdx}
+                          className="bg-card border border-border rounded-xl p-3 space-y-1.5"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Dumbbell className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                              <span className="text-xs sm:text-sm font-bold text-foreground truncate">
+                                {meta?.title || 'Exercício'}
+                              </span>
+                            </div>
+                            {meta && (
+                              <Badge
+                                variant="info"
+                                className="rounded-md px-2 py-0.5 text-[10px] font-semibold shrink-0"
+                              >
+                                {MUSCLE_LABELS[meta.primaryMuscle]}
+                              </Badge>
+                            )}
                           </div>
-                          {meta && (
-                            <span className="px-2 py-0.5 rounded-md bg-blue-50 text-[#0084FF] text-[10px] font-semibold shrink-0">
-                              {MUSCLE_LABELS[meta.primaryMuscle]}
-                            </span>
-                          )}
-                        </div>
 
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {ex.s.map((st, sIdx) => (
-                            <span
-                              key={sIdx}
-                              className="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-medium"
-                            >
-                              {st.t === 'warmup'
-                                ? 'W'
-                                : st.t === 'dropset'
-                                ? 'D'
-                                : st.t === 'failure'
-                                ? 'F'
-                                : `${sIdx + 1}ª`}
-                              : {st.w ? `${st.w}kg × ` : ''}
-                              {st.r ?? 0} reps
-                            </span>
-                          ))}
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {ex.s.map((st, sIdx) => (
+                              <Badge
+                                key={sIdx}
+                                variant="secondary"
+                                className="rounded-lg px-2 py-0.5 text-[11px] font-medium tabular-nums"
+                              >
+                                {st.t === 'warmup'
+                                  ? 'W'
+                                  : st.t === 'dropset'
+                                  ? 'D'
+                                  : st.t === 'failure'
+                                  ? 'F'
+                                  : `${sIdx + 1}ª`}
+                                : {st.w ? `${st.w}kg × ` : ''}
+                                {st.r ?? 0} reps
+                              </Badge>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
             ))}
           </div>
 
           {/* Se for uma única rotina e o usuário já tiver pastas, permite escolher onde salvar */}
           {!isFolder && folders.length > 0 && (
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+            <div className="space-y-1.5">
+              <Label htmlFor="shared-import-folder">
                 Salvar em qual pasta? (Opcional)
-              </label>
-              <select
+              </Label>
+              <Select
                 value={selectedFolderId}
-                onChange={(e) => setSelectedFolderId(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 border border-slate-200 text-xs text-slate-900 font-medium"
+                onValueChange={setSelectedFolderId}
               >
-                <option value="">Sem Pasta (Minhas Rotinas)</option>
-                {folders.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger id="shared-import-folder">
+                  <SelectValue placeholder="Sem Pasta (Minhas Rotinas)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ROOT_FOLDER_VALUE}>
+                    Sem Pasta (Minhas Rotinas)
+                  </SelectItem>
+                  {folders.map((f) => (
+                    <SelectItem key={f.id} value={f.id}>
+                      {f.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
         </div>
 
         {/* Rodapé com Botões de Ação */}
-        <div className="p-4 border-t border-slate-100 bg-white space-y-2">
+        <ResponsiveDialogFooter className="sm:flex-row">
           {importedSuccess ? (
-            <div className="w-full py-3.5 rounded-2xl bg-emerald-500 text-white font-bold text-sm flex items-center justify-center gap-2">
+            <div className="w-full min-h-12 py-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 font-bold text-sm flex items-center justify-center gap-2">
               <Check className="w-5 h-5" /> Importado com Sucesso!
             </div>
           ) : (
-            <div className="flex flex-col sm:flex-row gap-2">
-              <button
-                type="button"
+            <div className="flex flex-col sm:flex-row gap-2 w-full">
+              <Button
+                variant="default"
+                size="lg"
                 onClick={() => handleImport(false)}
-                className="flex-1 py-3.5 px-4 rounded-2xl bg-[#0084FF] hover:bg-blue-600 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-sm transition"
+                className="flex-1 text-sm"
               >
                 <Download className="w-4 h-4" />
                 <span>
@@ -258,21 +302,22 @@ export function SharedImportModal({
                     ? `Adicionar Pasta (${totalRoutines} rotinas)`
                     : 'Adicionar às Minhas Rotinas'}
                 </span>
-              </button>
+              </Button>
 
               {!isFolder && (
-                <button
-                  type="button"
+                <Button
+                  variant="outline"
+                  size="lg"
                   onClick={() => handleImport(true)}
-                  className="py-3.5 px-4 rounded-2xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 font-bold text-sm flex items-center justify-center gap-1.5 transition"
+                  className="bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-sm"
                 >
                   <Play className="w-4 h-4 fill-current" /> Treinar Agora
-                </button>
+                </Button>
               )}
             </div>
           )}
-        </div>
-      </div>
-    </div>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
 }

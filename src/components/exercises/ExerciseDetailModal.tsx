@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useState } from 'react';
 import {
   Award,
   BookOpen,
@@ -11,8 +11,9 @@ import {
   Trash2,
   TrendingUp,
   Trophy,
-  X,
 } from 'lucide-react';
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
+import { toast } from 'sonner';
 import { EQUIPMENT_LABELS, Exercise, MUSCLE_LABELS } from '@/types/workout';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import {
@@ -26,24 +27,57 @@ import {
 } from '@/lib/calculations';
 import { BodyHeatmapSVG } from '@/components/analytics/BodyHeatmapSVG';
 import { fetchExerciseDBDetail, searchExerciseDB } from '@/lib/exercisedb';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '@/components/ui/responsive-dialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from '@/components/ui/chart';
+import { cn } from '@/lib/utils';
 
-interface ExerciseDetailModalProps {
+export interface ExerciseDetailModalProps {
   exercise: Exercise | null;
   onClose: () => void;
 }
 
-export function ExerciseDetailModal({ exercise, onClose }: ExerciseDetailModalProps) {
+type MetricKey = 'heaviest' | '1rm' | 'volume';
+
+const METRIC_META: Record<MetricKey, { label: string; color: string }> = {
+  '1rm': { label: '1RM Estimado', color: 'var(--chart-1)' },
+  heaviest: { label: 'Maior Peso', color: 'var(--chart-1)' },
+  volume: { label: 'Volume Sessão', color: 'var(--chart-2)' },
+};
+
+export function ExerciseDetailModal({
+  exercise,
+  onClose,
+}: ExerciseDetailModalProps) {
   const workoutHistory = useWorkoutStore((s) => s.workoutHistory);
   const routines = useWorkoutStore((s) => s.routines);
   const settings = useWorkoutStore((s) => s.settings);
   const importExercisesBatch = useWorkoutStore((s) => s.importExercisesBatch);
   const deleteExercise = useWorkoutStore((s) => s.deleteExercise);
+
   const weightUnit = settings?.weightUnit === 'lbs' ? 'lbs' : 'kg';
   const unitLabel = getWeightUnitLabel(weightUnit);
+
   const [activeTab, setActiveTab] = useState<'summary' | 'history' | 'howto'>(
     'summary'
   );
-  const [metric, setMetric] = useState<'heaviest' | '1rm' | 'volume'>('1rm');
+  const [metric, setMetric] = useState<MetricKey>('1rm');
   const [resolvedGifUrl, setResolvedGifUrl] = useState<string | undefined>(
     undefined
   );
@@ -51,14 +85,20 @@ export function ExerciseDetailModal({ exercise, onClose }: ExerciseDetailModalPr
   const [resolvedInstructions, setResolvedInstructions] = useState<string[]>(
     []
   );
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const rawGradientId = useId();
+  const gradientId = `exercise-evolution-${rawGradientId.replace(/:/g, '')}`;
 
   useEffect(() => {
     setGifFailed(false);
+    setShowDeleteConfirm(false);
     if (!exercise) {
       setResolvedGifUrl(undefined);
       setResolvedInstructions([]);
       return;
     }
+    setActiveTab('summary');
     setResolvedGifUrl(exercise.gifUrl);
     setResolvedInstructions(exercise.instructions || []);
 
@@ -105,7 +145,9 @@ export function ExerciseDetailModal({ exercise, onClose }: ExerciseDetailModalPr
     if (!exercise) return [];
     return workoutHistory
       .map((session) => {
-        const found = session.exercises.find((e) => e.exerciseId === exercise.id);
+        const found = session.exercises.find(
+          (e) => e.exerciseId === exercise.id
+        );
         if (!found) return null;
         const completedSets = found.sets.filter((s) => s.completed);
         if (completedSets.length === 0) return null;
@@ -139,7 +181,28 @@ export function ExerciseDetailModal({ exercise, onClose }: ExerciseDetailModalPr
       .reverse();
   }, [exercise, workoutHistory]);
 
+  const usageCounts = useMemo(() => {
+    if (!exercise) return { routines: 0, history: 0 };
+    return {
+      routines: routines.filter((r) =>
+        r.exercises.some((ex) => ex.exerciseId === exercise.id)
+      ).length,
+      history: workoutHistory.filter((w) =>
+        w.exercises.some((ex) => ex.exerciseId === exercise.id)
+      ).length,
+    };
+  }, [exercise, routines, workoutHistory]);
+
   if (!exercise || !records) return null;
+
+  const activeMetricMeta = METRIC_META[metric];
+
+  const chartConfig: ChartConfig = {
+    value: {
+      label: activeMetricMeta.label,
+      color: activeMetricMeta.color,
+    },
+  };
 
   const chartPoints = exerciseSessions.map((s) => {
     const rawKg =
@@ -149,551 +212,563 @@ export function ExerciseDetailModal({ exercise, onClose }: ExerciseDetailModalPr
         ? s.max1RM
         : s.sessionVolume;
     const displayVal = convertWeightFromKg(rawKg, weightUnit) ?? 0;
+    const dateObj = new Date(s.date);
     return {
-      dateLabel: new Date(s.date).toLocaleDateString('pt-BR', {
+      dateLabel: dateObj.toLocaleDateString('pt-BR', {
         day: '2-digit',
         month: '2-digit',
+      }),
+      fullDateLabel: dateObj.toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
       }),
       value: displayVal,
       rawKg,
     };
   });
 
-  const maxChartVal = Math.max(...chartPoints.map((p) => p.value), 10);
-  const minChartVal = Math.max(
-    0,
-    Math.min(...chartPoints.map((p) => p.value)) * 0.85
-  );
   const repMaxRows = getRepMaxTable(records.best1RM?.value || 100);
 
+  const handleConfirmDelete = () => {
+    const title = exercise.title;
+    deleteExercise(exercise.id);
+    setShowDeleteConfirm(false);
+    toast.success(`Exercício "${title}" excluído da biblioteca.`);
+    onClose();
+  };
+
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur-xs p-2 sm:p-4">
-      <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-bold text-slate-900">
-                {exercise.title}
-              </h2>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">
+    <>
+      <ResponsiveDialog
+        open={Boolean(exercise)}
+        onOpenChange={(open) => {
+          if (!open) onClose();
+        }}
+      >
+        <ResponsiveDialogContent className="sm:max-w-2xl">
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle className="text-lg">
+              {exercise.title}
+            </ResponsiveDialogTitle>
+            <ResponsiveDialogDescription>
               Primário:{' '}
-              <span className="text-[#0084FF] font-semibold">
+              <span className="text-blue-600 dark:text-blue-400 font-semibold">
                 {MUSCLE_LABELS[exercise.primaryMuscle]}
               </span>{' '}
               • Equipamento:{' '}
-              <span className="text-slate-700 font-medium">
+              <span className="text-foreground font-medium">
                 {EQUIPMENT_LABELS[exercise.equipment]}
               </span>
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            aria-label="Fechar detalhes do exercício"
-            className="w-11 h-11 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+            </ResponsiveDialogDescription>
+          </ResponsiveDialogHeader>
 
-        {/* Abas */}
-        <div className="grid grid-cols-3 border-b border-slate-200 bg-slate-50 px-4">
-          <button
-            onClick={() => setActiveTab('summary')}
-            className={`min-h-[44px] py-3 text-xs sm:text-sm font-semibold border-b-2 transition flex items-center justify-center gap-1.5 ${
-              activeTab === 'summary'
-                ? 'border-[#0084FF] text-[#0084FF]'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
+          <Tabs
+            value={activeTab}
+            onValueChange={(value) =>
+              setActiveTab(value as 'summary' | 'history' | 'howto')
+            }
+            className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden"
           >
-            <TrendingUp className="w-4 h-4" />
-            Resumo & PRs
-          </button>
-          <button
-            onClick={() => setActiveTab('history')}
-            className={`min-h-[44px] py-3 text-xs sm:text-sm font-semibold border-b-2 transition flex items-center justify-center gap-1.5 ${
-              activeTab === 'history'
-                ? 'border-[#0084FF] text-[#0084FF]'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <History className="w-4 h-4" />
-            Histórico ({exerciseSessions.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('howto')}
-            className={`min-h-[44px] py-3 text-xs sm:text-sm font-semibold border-b-2 transition flex items-center justify-center gap-1.5 ${
-              activeTab === 'howto'
-                ? 'border-[#0084FF] text-[#0084FF]'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <BookOpen className="w-4 h-4" />
-            Como Fazer & 1RM
-          </button>
-        </div>
-
-        <div className="p-5 overflow-y-auto space-y-6 flex-1">
-          {activeTab === 'summary' && (
-            <>
-              {resolvedGifUrl && !gifFailed && (
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 flex flex-col items-center justify-center">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={resolvedGifUrl}
-                    alt={exercise.title}
-                    loading="lazy"
-                    onError={() => setGifFailed(true)}
-                    className="w-44 h-44 object-contain rounded-xl bg-slate-100"
-                  />
-                  <span className="text-[11px] text-slate-400 mt-1">
-                    Demonstração da Execução (ExerciseDB)
+            <div className="shrink-0 border-b border-border bg-secondary/40 px-4 py-2.5">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="summary" className="min-h-11">
+                  <TrendingUp className="size-4 shrink-0" />
+                  <span className="truncate">Resumo &amp; PRs</span>
+                </TabsTrigger>
+                <TabsTrigger value="history" className="min-h-11">
+                  <History className="size-4 shrink-0" />
+                  <span className="truncate">
+                    Histórico ({exerciseSessions.length})
                   </span>
-                </div>
-              )}
+                </TabsTrigger>
+                <TabsTrigger value="howto" className="min-h-11">
+                  <BookOpen className="size-4 shrink-0" />
+                  <span className="truncate">Como Fazer &amp; 1RM</span>
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center gap-4">
-                <div className="flex-1 space-y-2">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Anatomia Recrutada
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
-                    <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-50 text-[#0084FF] border border-blue-200">
-                      Primário: {MUSCLE_LABELS[exercise.primaryMuscle]}
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              <TabsContent value="summary" className="mt-0 space-y-5">
+                {resolvedGifUrl && !gifFailed && (
+                  <Card className="bg-secondary/50 p-3 flex flex-col items-center justify-center shadow-none">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={resolvedGifUrl}
+                      alt={exercise.title}
+                      loading="lazy"
+                      onError={() => setGifFailed(true)}
+                      className="size-44 object-contain rounded-xl bg-muted"
+                    />
+                    <span className="text-[11px] text-muted-foreground mt-1.5">
+                      Demonstração da Execução (ExerciseDB)
                     </span>
-                    {exercise.secondaryMuscles.map((sec) => (
-                      <span
-                        key={sec}
-                        className="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-200/70 text-slate-700"
-                      >
-                        Secundário: {MUSCLE_LABELS[sec]}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <div className="w-44 shrink-0">
-                  <BodyHeatmapSVG
-                    highlightPrimary={exercise.primaryMuscle}
-                    highlightSecondary={exercise.secondaryMuscles}
-                    compact
-                  />
-                </div>
-              </div>
-
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-[#0084FF]" />
-                    Evolução do Exercício
-                  </h3>
-                  <div className="flex bg-white p-1 rounded-xl border border-slate-200 text-xs">
-                    <button
-                      onClick={() => setMetric('1rm')}
-                      className={`px-2.5 py-1 rounded-lg font-medium transition ${
-                        metric === '1rm'
-                          ? 'bg-[#0084FF] text-white'
-                          : 'text-slate-500 hover:text-slate-900'
-                      }`}
-                    >
-                      1RM Estimado
-                    </button>
-                    <button
-                      onClick={() => setMetric('heaviest')}
-                      className={`px-2.5 py-1 rounded-lg font-medium transition ${
-                        metric === 'heaviest'
-                          ? 'bg-[#0084FF] text-white'
-                          : 'text-slate-500 hover:text-slate-900'
-                      }`}
-                    >
-                      Maior Peso
-                    </button>
-                    <button
-                      onClick={() => setMetric('volume')}
-                      className={`px-2.5 py-1 rounded-lg font-medium transition ${
-                        metric === 'volume'
-                          ? 'bg-[#0084FF] text-white'
-                          : 'text-slate-500 hover:text-slate-900'
-                      }`}
-                    >
-                      Volume Sessão
-                    </button>
-                  </div>
-                </div>
-
-                {chartPoints.length === 0 ? (
-                  <p className="text-xs text-slate-400 py-8 text-center">
-                    Ainda não há sessões registradas para este exercício.
-                  </p>
-                ) : (
-                  <div className="pt-2">
-                    <svg viewBox="0 0 500 160" className="w-full h-40 overflow-visible">
-                      {[0, 0.5, 1].map((t, idx) => {
-                        const y = 20 + t * 110;
-                        const val = Math.round(
-                          maxChartVal - t * (maxChartVal - minChartVal)
-                        );
-                        return (
-                          <g key={idx}>
-                            <line
-                              x1="40"
-                              y1={y}
-                              x2="485"
-                              y2={y}
-                              className="stroke-slate-300"
-                              strokeDasharray="4 4"
-                            />
-                            <text
-                              x="5"
-                              y={y + 4}
-                              className="fill-slate-500"
-                              fontSize="10"
-                            >
-                              {val}
-                              {unitLabel}
-                            </text>
-                          </g>
-                        );
-                      })}
-
-                      {chartPoints.length > 1 && (
-                        <polyline
-                          fill="none"
-                          stroke="#3B82F6"
-                          strokeWidth="3"
-                          points={chartPoints
-                            .map((pt, i) => {
-                              const x =
-                                50 + (i / (chartPoints.length - 1)) * 420;
-                              const ratio =
-                                maxChartVal === minChartVal
-                                  ? 0.5
-                                  : (pt.value - minChartVal) /
-                                    (maxChartVal - minChartVal);
-                              const y = 130 - ratio * 110;
-                              return `${x},${y}`;
-                            })
-                            .join(' ')}
-                        />
-                      )}
-
-                      {chartPoints.map((pt, i) => {
-                        const x =
-                          chartPoints.length === 1
-                            ? 260
-                            : 50 + (i / (chartPoints.length - 1)) * 420;
-                        const ratio =
-                          maxChartVal === minChartVal
-                            ? 0.5
-                            : (pt.value - minChartVal) / (maxChartVal - minChartVal);
-                        const y = 130 - ratio * 110;
-                        return (
-                          <g key={i}>
-                            <circle
-                              cx={x}
-                              cy={y}
-                              r="5"
-                              fill="#3B82F6"
-                              stroke="#FFFFFF"
-                              strokeWidth="2"
-                            />
-                            <text
-                              x={x}
-                              y={y - 10}
-                              textAnchor="middle"
-                              className="fill-slate-900"
-                              fontSize="10"
-                              fontWeight="bold"
-                            >
-                              {formatWeightWithUnit(pt.rawKg, weightUnit)}
-                            </text>
-                            <text
-                              x={x}
-                              y={150}
-                              textAnchor="middle"
-                              className="fill-slate-500"
-                              fontSize="10"
-                            >
-                              {pt.dateLabel}
-                            </text>
-                          </g>
-                        );
-                      })}
-                    </svg>
-                  </div>
+                  </Card>
                 )}
-              </div>
 
-              <div className="space-y-3">
-                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  <Trophy className="w-4 h-4 text-amber-500" />
-                  Recordes Pessoais (PRs)
-                </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
-                    <span className="text-[11px] text-slate-500">1RM Estimado</span>
-                    <p className="text-lg font-extrabold text-amber-600 mt-1">
-                      {records.best1RM
-                        ? formatWeightWithUnit(
-                            records.best1RM.value,
-                            weightUnit,
-                            true
-                          )
-                        : '—'}
-                    </p>
+                <Card className="bg-secondary/50 p-4 flex flex-col sm:flex-row items-center gap-4 shadow-none">
+                  <div className="flex-1 space-y-2.5">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      Anatomia Recrutada
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="info" className="rounded-lg px-2.5 py-1">
+                        Primário: {MUSCLE_LABELS[exercise.primaryMuscle]}
+                      </Badge>
+                      {exercise.secondaryMuscles.map((sec) => (
+                        <Badge
+                          key={sec}
+                          variant="secondary"
+                          className="rounded-lg px-2.5 py-1 font-medium"
+                        >
+                          Secundário: {MUSCLE_LABELS[sec]}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
-                    <span className="text-[11px] text-slate-500">Maior Peso</span>
-                    <p className="text-lg font-extrabold text-slate-900 mt-1">
-                      {records.heaviestWeight
-                        ? formatWeightWithUnit(
-                            records.heaviestWeight.value,
-                            weightUnit,
-                            true
-                          )
-                        : '—'}
-                    </p>
+                  <div className="w-44 shrink-0">
+                    <BodyHeatmapSVG
+                      highlightPrimary={exercise.primaryMuscle}
+                      highlightSecondary={exercise.secondaryMuscles}
+                      compact
+                    />
                   </div>
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
-                    <span className="text-[11px] text-slate-500">
-                      Melhor Série (Vol)
-                    </span>
-                    <p className="text-lg font-extrabold text-[#0084FF] mt-1">
-                      {records.bestSetVolume
-                        ? formatWeightWithUnit(
-                            records.bestSetVolume.value,
-                            weightUnit,
-                            true
-                          )
-                        : '—'}
-                    </p>
+                </Card>
+
+                <Card className="bg-secondary/50 p-4 space-y-4 shadow-none">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                      <TrendingUp className="size-4 text-primary" />
+                      Evolução do Exercício
+                    </h3>
+                    <div className="grid grid-cols-3 sm:flex items-center gap-1 rounded-xl border border-border bg-card p-1">
+                      {(
+                        [
+                          { id: '1rm', label: '1RM Estimado' },
+                          { id: 'heaviest', label: 'Maior Peso' },
+                          { id: 'volume', label: 'Volume Sessão' },
+                        ] as const
+                      ).map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setMetric(opt.id)}
+                          aria-pressed={metric === opt.id}
+                          className={cn(
+                            'min-h-11 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer',
+                            metric === opt.id
+                              ? 'bg-primary text-primary-foreground shadow-xs'
+                              : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
-                    <span className="text-[11px] text-slate-500">
-                      Volume Máx Sessão
-                    </span>
-                    <p className="text-lg font-extrabold text-emerald-600 mt-1">
-                      {records.bestSessionVolume
-                        ? formatWeightWithUnit(
-                            records.bestSessionVolume.value,
-                            weightUnit,
-                            true
-                          )
-                        : '—'}
+
+                  {chartPoints.length === 0 ? (
+                    <p className="text-xs text-muted-foreground py-8 text-center">
+                      Ainda não há sessões registradas para este exercício.
                     </p>
+                  ) : (
+                    <div className="pt-1">
+                      <ChartContainer
+                        config={chartConfig}
+                        className="aspect-auto h-48 w-full"
+                      >
+                        <AreaChart
+                          data={chartPoints}
+                          margin={{ top: 10, right: 12, left: 0, bottom: 0 }}
+                        >
+                          <defs>
+                            <linearGradient
+                              id={gradientId}
+                              x1="0"
+                              y1="0"
+                              x2="0"
+                              y2="1"
+                            >
+                              <stop
+                                offset="5%"
+                                stopColor="var(--color-value)"
+                                stopOpacity={0.35}
+                              />
+                              <stop
+                                offset="95%"
+                                stopColor="var(--color-value)"
+                                stopOpacity={0.02}
+                              />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid
+                            vertical={false}
+                            strokeDasharray="4 4"
+                            className="stroke-border"
+                          />
+                          <XAxis
+                            dataKey="dateLabel"
+                            tickLine={false}
+                            axisLine={false}
+                            tickMargin={8}
+                            fontSize={11}
+                          />
+                          <YAxis
+                            tickLine={false}
+                            axisLine={false}
+                            tickMargin={6}
+                            width={52}
+                            fontSize={11}
+                            domain={['auto', 'auto']}
+                            tickFormatter={(val: number) =>
+                              `${val}${unitLabel}`
+                            }
+                          />
+                          <ChartTooltip
+                            cursor={{
+                              stroke: 'var(--border)',
+                              strokeDasharray: '4 4',
+                            }}
+                            content={
+                              <ChartTooltipContent
+                                indicator="dot"
+                                labelFormatter={(_label, payload) => {
+                                  const fullDate =
+                                    payload?.[0]?.payload?.fullDateLabel;
+                                  return typeof fullDate === 'string'
+                                    ? fullDate
+                                    : String(_label ?? '');
+                                }}
+                                formatter={(value, _name, item) => {
+                                  const rawKg =
+                                    typeof item?.payload?.rawKg === 'number'
+                                      ? item.payload.rawKg
+                                      : null;
+                                  const formatted =
+                                    rawKg !== null
+                                      ? formatWeightWithUnit(
+                                          rawKg,
+                                          weightUnit,
+                                          true
+                                        )
+                                      : `${Number(value).toLocaleString('pt-BR')} ${unitLabel}`;
+                                  return (
+                                    <div className="flex flex-1 items-center justify-between gap-3">
+                                      <span className="text-muted-foreground">
+                                        {activeMetricMeta.label}
+                                      </span>
+                                      <span className="font-bold tabular-nums text-foreground">
+                                        {formatted}
+                                      </span>
+                                    </div>
+                                  );
+                                }}
+                              />
+                            }
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="value"
+                            stroke="var(--color-value)"
+                            strokeWidth={2.5}
+                            fill={`url(#${gradientId})`}
+                            dot={{
+                              r: 4,
+                              fill: 'var(--color-value)',
+                              stroke: 'var(--card)',
+                              strokeWidth: 2,
+                            }}
+                            activeDot={{
+                              r: 6,
+                              fill: 'var(--color-value)',
+                              stroke: 'var(--card)',
+                              strokeWidth: 2,
+                            }}
+                          />
+                        </AreaChart>
+                      </ChartContainer>
+                    </div>
+                  )}
+                </Card>
+
+                <div className="space-y-3">
+                  <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                    <Trophy className="size-4 text-amber-500" />
+                    Recordes Pessoais (PRs)
+                  </h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <Card className="bg-secondary/50 p-3 shadow-none">
+                      <span className="text-[11px] text-muted-foreground">
+                        1RM Estimado
+                      </span>
+                      <p className="text-lg font-extrabold text-amber-600 dark:text-amber-400 mt-1 tabular-nums">
+                        {records.best1RM
+                          ? formatWeightWithUnit(
+                              records.best1RM.value,
+                              weightUnit,
+                              true
+                            )
+                          : '—'}
+                      </p>
+                    </Card>
+                    <Card className="bg-secondary/50 p-3 shadow-none">
+                      <span className="text-[11px] text-muted-foreground">
+                        Maior Peso
+                      </span>
+                      <p className="text-lg font-extrabold text-foreground mt-1 tabular-nums">
+                        {records.heaviestWeight
+                          ? formatWeightWithUnit(
+                              records.heaviestWeight.value,
+                              weightUnit,
+                              true
+                            )
+                          : '—'}
+                      </p>
+                    </Card>
+                    <Card className="bg-secondary/50 p-3 shadow-none">
+                      <span className="text-[11px] text-muted-foreground">
+                        Melhor Série (Vol)
+                      </span>
+                      <p className="text-lg font-extrabold text-blue-600 dark:text-blue-400 mt-1 tabular-nums">
+                        {records.bestSetVolume
+                          ? formatWeightWithUnit(
+                              records.bestSetVolume.value,
+                              weightUnit,
+                              true
+                            )
+                          : '—'}
+                      </p>
+                    </Card>
+                    <Card className="bg-secondary/50 p-3 shadow-none">
+                      <span className="text-[11px] text-muted-foreground">
+                        Volume Máx Sessão
+                      </span>
+                      <p className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400 mt-1 tabular-nums">
+                        {records.bestSessionVolume
+                          ? formatWeightWithUnit(
+                              records.bestSessionVolume.value,
+                              weightUnit,
+                              true
+                            )
+                          : '—'}
+                      </p>
+                    </Card>
                   </div>
                 </div>
-              </div>
-            </>
-          )}
+              </TabsContent>
 
-          {activeTab === 'history' && (
-            <div className="space-y-4">
-              {exerciseSessions.length === 0 ? (
-                <div className="text-center py-12 text-slate-400 text-sm">
-                  Nenhum histórico encontrado para este exercício.
-                </div>
-              ) : (
-                [...exerciseSessions].reverse().map((sess) => (
-                  <div
-                    key={sess.sessionId}
-                    className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3"
-                  >
-                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                      <div>
-                        <h4 className="font-bold text-slate-900 text-sm">
-                          {sess.workoutTitle}
-                        </h4>
-                        <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-                          <Calendar className="w-3.5 h-3.5" />
-                          {new Date(sess.date).toLocaleDateString('pt-BR', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric',
-                          })}
-                        </p>
+              <TabsContent value="history" className="mt-0 space-y-4">
+                {exerciseSessions.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground text-sm">
+                    Nenhum histórico encontrado para este exercício.
+                  </div>
+                ) : (
+                  [...exerciseSessions].reverse().map((sess) => (
+                    <Card
+                      key={sess.sessionId}
+                      className="bg-secondary/40 p-4 space-y-3 shadow-none"
+                    >
+                      <div className="flex items-center justify-between gap-2 border-b border-border pb-2.5">
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-foreground text-sm truncate">
+                            {sess.workoutTitle}
+                          </h4>
+                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                            <Calendar className="size-3.5 shrink-0" />
+                            {new Date(sess.date).toLocaleDateString('pt-BR', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                            })}
+                          </p>
+                        </div>
+                        <div className="text-right text-xs shrink-0">
+                          <span className="text-muted-foreground">
+                            1RM da Sessão:{' '}
+                          </span>
+                          <span className="font-bold text-blue-600 dark:text-blue-400 tabular-nums">
+                            {sess.max1RM > 0
+                              ? formatWeightWithUnit(
+                                  sess.max1RM,
+                                  weightUnit,
+                                  true
+                                )
+                              : '—'}
+                          </span>
+                        </div>
                       </div>
-                      <div className="text-right text-xs">
-                        <span className="text-slate-500">1RM da Sessão: </span>
-                        <span className="font-bold text-[#0084FF]">
-                          {sess.max1RM > 0
-                            ? formatWeightWithUnit(
-                                sess.max1RM,
-                                weightUnit,
-                                true
-                              )
-                            : '—'}
+
+                      <div className="space-y-1.5">
+                        {sess.sets.map((s, idx) => {
+                          const est1rm = calculate1RM(s.weightKg, s.reps);
+                          return (
+                            <div
+                              key={s.id}
+                              className="flex items-center justify-between gap-2 text-xs py-2 px-3 rounded-xl bg-card border border-border"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="size-6 rounded-md flex items-center justify-center font-bold text-[11px] bg-secondary text-secondary-foreground shrink-0">
+                                  {s.type === 'warmup'
+                                    ? 'W'
+                                    : s.type === 'dropset'
+                                    ? 'D'
+                                    : s.type === 'failure'
+                                    ? 'F'
+                                    : idx + 1}
+                                </span>
+                                <span className="text-foreground font-semibold truncate">
+                                  {formatSetSummary(
+                                    s,
+                                    exercise.measurementType,
+                                    weightUnit
+                                  )}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                {s.prs && s.prs.length > 0 && (
+                                  <Badge
+                                    variant="warning"
+                                    className="text-[10px] px-2 py-0.5"
+                                  >
+                                    <Award className="size-3" /> PR
+                                  </Badge>
+                                )}
+                                {exercise.measurementType !== 'duration' &&
+                                  exercise.measurementType !==
+                                    'distance_duration' &&
+                                  est1rm > 0 && (
+                                    <span className="text-muted-foreground tabular-nums">
+                                      1RM:{' '}
+                                      {formatWeightWithUnit(est1rm, weightUnit)}
+                                    </span>
+                                  )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </Card>
+                  ))
+                )}
+              </TabsContent>
+
+              <TabsContent value="howto" className="mt-0 space-y-5">
+                {resolvedGifUrl && !gifFailed && (
+                  <Card className="bg-secondary/50 p-4 flex flex-col items-center justify-center shadow-none">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={resolvedGifUrl}
+                      alt={exercise.title}
+                      loading="lazy"
+                      onError={() => setGifFailed(true)}
+                      className="size-52 object-contain rounded-xl bg-muted"
+                    />
+                  </Card>
+                )}
+
+                <Card className="bg-secondary/50 p-4 space-y-3 shadow-none">
+                  <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                    <Dumbbell className="size-4 text-primary" />
+                    Instruções Passo a Passo
+                  </h3>
+                  {resolvedInstructions.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      Nenhuma instrução cadastrada para este exercício.
+                    </p>
+                  ) : (
+                    <ol className="space-y-2.5 text-xs sm:text-sm text-foreground/90 list-decimal list-inside">
+                      {resolvedInstructions.map((step, i) => (
+                        <li key={i} className="leading-relaxed">
+                          {step}
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                  {exercise.tips && (
+                    <div className="mt-3 p-3 rounded-xl bg-primary/10 border border-primary/25 text-xs text-foreground flex items-start gap-2">
+                      <Info className="size-4 text-primary shrink-0 mt-0.5" />
+                      <span>{exercise.tips}</span>
+                    </div>
+                  )}
+                </Card>
+
+                <Card className="bg-secondary/50 p-4 space-y-3 shadow-none">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-sm font-bold text-foreground">
+                      Tabela de Equivalência 1RM
+                    </h3>
+                    <span className="text-xs text-muted-foreground">
+                      Baseada no 1RM de{' '}
+                      <strong className="text-amber-600 dark:text-amber-400 tabular-nums">
+                        {formatWeightWithUnit(
+                          records.best1RM?.value || 100,
+                          weightUnit,
+                          true
+                        )}
+                      </strong>
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    {repMaxRows.map((row) => (
+                      <div
+                        key={row.reps}
+                        className="bg-card border border-border rounded-xl p-2.5 flex items-center justify-between gap-2"
+                      >
+                        <span className="text-muted-foreground font-medium">
+                          {row.reps} {row.reps === 1 ? 'rep' : 'reps'} (
+                          {row.pct}%)
+                        </span>
+                        <span className="font-bold text-foreground tabular-nums">
+                          {formatWeightWithUnit(row.weight, weightUnit)}
                         </span>
                       </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      {sess.sets.map((s, idx) => {
-                        const est1rm = calculate1RM(s.weightKg, s.reps);
-                        return (
-                          <div
-                            key={s.id}
-                            className="flex items-center justify-between text-xs py-1.5 px-2.5 rounded-lg bg-white border border-slate-200/70"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="w-5 h-5 rounded flex items-center justify-center font-bold text-[11px] bg-slate-100 text-slate-700">
-                                {s.type === 'warmup'
-                                  ? 'W'
-                                  : s.type === 'dropset'
-                                  ? 'D'
-                                  : s.type === 'failure'
-                                  ? 'F'
-                                  : idx + 1}
-                              </span>
-                              <span className="text-slate-900 font-semibold">
-                                {formatSetSummary(
-                                  s,
-                                  exercise.measurementType,
-                                  weightUnit
-                                )}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {s.prs && s.prs.length > 0 && (
-                                <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300 font-bold text-[10px] flex items-center gap-1">
-                                  <Award className="w-3 h-3" /> PR
-                                </span>
-                              )}
-                              {exercise.measurementType !== 'duration' &&
-                                exercise.measurementType !==
-                                  'distance_duration' &&
-                                est1rm > 0 && (
-                                  <span className="text-slate-500">
-                                    1RM:{' '}
-                                    {formatWeightWithUnit(est1rm, weightUnit)}
-                                  </span>
-                                )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-
-          {activeTab === 'howto' && (
-            <div className="space-y-6">
-              {resolvedGifUrl && !gifFailed && (
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={resolvedGifUrl}
-                    alt={exercise.title}
-                    loading="lazy"
-                    onError={() => setGifFailed(true)}
-                    className="w-52 h-52 object-contain rounded-xl bg-slate-100"
-                  />
-                </div>
-              )}
-
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
-                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  <Dumbbell className="w-4 h-4 text-[#0084FF]" />
-                  Instruções Passo a Passo
-                </h3>
-                {resolvedInstructions.length === 0 ? (
-                  <p className="text-xs text-slate-500">
-                    Nenhuma instrução cadastrada para este exercício.
-                  </p>
-                ) : (
-                  <ol className="space-y-2.5 text-xs sm:text-sm text-slate-700 list-decimal list-inside">
-                    {resolvedInstructions.map((step, i) => (
-                      <li key={i} className="leading-relaxed">
-                        {step}
-                      </li>
                     ))}
-                  </ol>
-                )}
-                {exercise.tips && (
-                  <div className="mt-3 p-3 rounded-xl bg-blue-50 border border-blue-200 text-xs text-slate-700 flex items-start gap-2">
-                    <Info className="w-4 h-4 text-[#0084FF] shrink-0 mt-0.5" />
-                    <span>{exercise.tips}</span>
                   </div>
-                )}
-              </div>
-
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-slate-900">
-                    Tabela de Equivalência 1RM
-                  </h3>
-                  <span className="text-xs text-slate-500">
-                    Baseada no 1RM de{' '}
-                    <strong className="text-amber-600">
-                      {formatWeightWithUnit(
-                        records.best1RM?.value || 100,
-                        weightUnit,
-                        true
-                      )}
-                    </strong>
-                  </span>
-                </div>
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 text-xs">
-                  {repMaxRows.map((row) => (
-                    <div
-                      key={row.reps}
-                      className="bg-white border border-slate-200 rounded-xl p-2.5 flex items-center justify-between"
-                    >
-                      <span className="text-slate-500 font-medium">
-                        {row.reps} {row.reps === 1 ? 'rep' : 'reps'} ({row.pct}%)
-                      </span>
-                      <span className="font-bold text-slate-900">
-                        {formatWeightWithUnit(row.weight, weightUnit)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+                </Card>
+              </TabsContent>
             </div>
-          )}
-        </div>
+          </Tabs>
 
-        {/* Rodapé com ação protegida de Excluir Exercício */}
-        <div className="px-5 py-3.5 border-t border-slate-100 bg-white flex items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              const usedInRoutines = routines.filter((r) =>
-                r.exercises.some((ex) => ex.exerciseId === exercise.id)
-              ).length;
-              const usedInHistory = workoutHistory.filter((w) =>
-                w.exercises.some((ex) => ex.exerciseId === exercise.id)
-              ).length;
-              const usageWarn =
-                usedInRoutines > 0 || usedInHistory > 0
-                  ? `\n\nAtenção: este exercício está vinculado a ${usedInRoutines} rotina(s) e ${usedInHistory} treino(s) no histórico.`
-                  : '';
-              if (
-                confirm(
-                  `Tem certeza que deseja excluir o exercício "${exercise.title}" da biblioteca?${usageWarn}`
-                )
-              ) {
-                deleteExercise(exercise.id);
-                onClose();
-              }
-            }}
-            className="h-11 px-4 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold flex items-center gap-2 transition"
-          >
-            <Trash2 className="w-4 h-4" /> Excluir Exercício
-          </button>
+          {/* Rodapé com ação protegida de Excluir Exercício */}
+          <ResponsiveDialogFooter className="flex-row items-center justify-between sm:justify-between">
+            <Button
+              variant="destructive-outline"
+              onClick={() => setShowDeleteConfirm(true)}
+            >
+              <Trash2 className="size-4" />
+              Excluir Exercício
+            </Button>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-11 px-5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition"
-          >
-            Fechar
-          </button>
-        </div>
-      </div>
-    </div>
+            <Button variant="secondary" onClick={onClose}>
+              Fechar
+            </Button>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        title={`Excluir "${exercise.title}"?`}
+        description={
+          <>
+            <span>
+              Tem certeza que deseja excluir este exercício da biblioteca?
+            </span>
+            {(usageCounts.routines > 0 || usageCounts.history > 0) && (
+              <span className="block mt-2 font-semibold text-amber-700 dark:text-amber-400">
+                Atenção: este exercício está vinculado a {usageCounts.routines}{' '}
+                rotina(s) e {usageCounts.history} treino(s) no histórico.
+              </span>
+            )}
+          </>
+        }
+        confirmLabel="Excluir Exercício"
+        cancelLabel="Cancelar"
+        variant="destructive"
+        onConfirm={handleConfirmDelete}
+      />
+    </>
   );
 }
