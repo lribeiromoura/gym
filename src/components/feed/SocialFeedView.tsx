@@ -366,12 +366,12 @@ export function SocialFeedView() {
                           key={ex.id}
                           className="bg-secondary/60 border border-border rounded-xl p-3 space-y-2"
                         >
-                          <div className="flex items-center justify-between gap-2 text-xs">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-xs">
                             <div className="flex items-center gap-2 font-bold text-foreground min-w-0">
                               <span className="text-blue-600 dark:text-blue-400 shrink-0 tabular-nums">
                                 {ex.sets.length} séries
                               </span>
-                              <span className="text-muted-foreground">•</span>
+                              <span className="text-muted-foreground shrink-0">•</span>
                               <span className="truncate">
                                 {meta?.title || 'Exercício'}
                               </span>
@@ -441,15 +441,27 @@ export function SocialFeedView() {
                       );
                     })}
 
-                    <div className="flex items-center justify-between gap-2 pt-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                       <Button
                         variant="link"
                         onClick={() => toggleExpand(w.id)}
-                        className="px-2 text-xs text-blue-600 dark:text-blue-400"
+                        className="px-1.5 text-xs text-blue-600 dark:text-blue-400"
                       >
-                        {isExpanded
-                          ? 'Ocultar detalhes das séries'
-                          : 'Ver todas as séries detalhadas'}
+                        {isExpanded ? (
+                          <>
+                            <span className="sm:hidden">Ocultar séries</span>
+                            <span className="hidden sm:inline">
+                              Ocultar detalhes das séries
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="sm:hidden">Ver séries</span>
+                            <span className="hidden sm:inline">
+                              Ver todas as séries detalhadas
+                            </span>
+                          </>
+                        )}
                       </Button>
 
                       <Button
@@ -457,7 +469,7 @@ export function SocialFeedView() {
                         onClick={() =>
                           startWorkoutFromExercises(w.title, w.exercises)
                         }
-                        className="h-11 px-3 bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/30 text-xs text-emerald-700 dark:text-emerald-400"
+                        className="h-11 px-3 shrink-0 bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/30 text-xs text-emerald-700 dark:text-emerald-400"
                       >
                         <Play className="w-3.5 h-3.5 fill-current" /> Repetir
                         Treino

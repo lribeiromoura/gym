@@ -140,12 +140,15 @@ function ResponsiveDialogContent({
   return (
     <DrawerContent className={className}>
       {showCloseButton && (
-        <DrawerClose
+        <button
+          type="button"
+          data-vaul-no-drag
+          onClick={() => onOpenChange?.(false)}
           aria-label="Fechar"
-          className="absolute right-3.5 top-3.5 z-10 flex size-11 items-center justify-center rounded-xl bg-secondary text-muted-foreground transition-colors hover:bg-secondary/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+          className="absolute right-3.5 top-3.5 z-20 flex size-11 items-center justify-center rounded-xl bg-secondary text-muted-foreground transition-colors hover:bg-secondary/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
         >
           <X className="size-5" />
-        </DrawerClose>
+        </button>
       )}
       {children}
     </DrawerContent>

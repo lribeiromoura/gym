@@ -130,7 +130,7 @@ export default function IronPulseAppPage() {
               variant="secondary"
               size="icon"
               onClick={toggleTheme}
-              aria-label={isDark ? 'Mudar para modo claro' : 'Mudar para modo escuro'}
+              aria-label={isDark ? 'Ativar modo claro' : 'Ativar modo escuro'}
               title={isDark ? 'Modo Claro (☀️)' : 'Modo Escuro (🌙)'}
               className="shrink-0"
             >

@@ -272,19 +272,21 @@ export function ExerciseDetailModal({
           >
             <div className="shrink-0 border-b border-border bg-secondary/40 px-4 py-2.5">
               <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="summary" className="min-h-11">
-                  <TrendingUp className="size-4 shrink-0" />
-                  <span className="truncate">Resumo &amp; PRs</span>
+                <TabsTrigger value="summary" className="min-h-11 px-1.5 sm:px-3 text-xs sm:text-sm">
+                  <TrendingUp className="size-3.5 sm:size-4 shrink-0" />
+                  <span className="sm:hidden">Resumo</span>
+                  <span className="hidden sm:inline truncate">Resumo &amp; PRs</span>
                 </TabsTrigger>
-                <TabsTrigger value="history" className="min-h-11">
-                  <History className="size-4 shrink-0" />
+                <TabsTrigger value="history" className="min-h-11 px-1.5 sm:px-3 text-xs sm:text-sm">
+                  <History className="size-3.5 sm:size-4 shrink-0" />
                   <span className="truncate">
                     Histórico ({exerciseSessions.length})
                   </span>
                 </TabsTrigger>
-                <TabsTrigger value="howto" className="min-h-11">
-                  <BookOpen className="size-4 shrink-0" />
-                  <span className="truncate">Como Fazer &amp; 1RM</span>
+                <TabsTrigger value="howto" className="min-h-11 px-1.5 sm:px-3 text-xs sm:text-sm">
+                  <BookOpen className="size-3.5 sm:size-4 shrink-0" />
+                  <span className="sm:hidden">Execução</span>
+                  <span className="hidden sm:inline truncate">Como Fazer &amp; 1RM</span>
                 </TabsTrigger>
               </TabsList>
             </div>

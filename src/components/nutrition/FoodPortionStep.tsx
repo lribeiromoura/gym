@@ -234,16 +234,17 @@ export function FoodPortionStep({
         </Card>
       </div>
 
-      <ResponsiveDialogFooter className="grid shrink-0 grid-cols-2 gap-2.5 sm:grid sm:grid-cols-2">
-        <Button variant="secondary" size="lg" onClick={onBack}>
+      <ResponsiveDialogFooter className="grid shrink-0 grid-cols-[1fr_1.6fr] gap-2.5 sm:grid sm:grid-cols-2">
+        <Button variant="secondary" size="lg" className="px-3 sm:px-5" onClick={onBack}>
           Voltar
         </Button>
         <Button
           type="submit"
           size="lg"
+          className="px-3 sm:px-5 text-sm sm:text-base"
           disabled={!quantity || quantity <= 0}
         >
-          <Check className="size-4" /> Adicionar ao Diário
+          <Check className="size-4 shrink-0" /> Adicionar ao Diário
         </Button>
       </ResponsiveDialogFooter>
     </form>
