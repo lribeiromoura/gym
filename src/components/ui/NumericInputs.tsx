@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { cn } from '@/lib/utils';
 
 /**
  * Formata um número decimal para exibição no padrão brasileiro (ex: 15.5 -> "15,5", 9.1 -> "9,1")
@@ -105,7 +106,10 @@ export function DecimalInput({
       }}
       onBlur={handleBlur}
       onChange={handleChange}
-      className={`text-base tabular-nums ${className}`}
+      className={cn(
+        'text-base tabular-nums focus-visible:outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30',
+        className
+      )}
     />
   );
 }
@@ -181,7 +185,10 @@ export function IntegerInput({
       }}
       onBlur={handleBlur}
       onChange={handleChange}
-      className={`text-base tabular-nums ${className}`}
+      className={cn(
+        'text-base tabular-nums focus-visible:outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30',
+        className
+      )}
     />
   );
 }
