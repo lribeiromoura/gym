@@ -102,6 +102,22 @@ textarea {
     color: #94A3B8;
   }
 
+  /* Suporte de contraste para gráficos SVG em Modo Escuro */
+  .theme-dark .fill-slate-900,
+  .theme-dark .fill-slate-800 {
+    fill: #F8FAFC;
+  }
+
+  .theme-dark .fill-slate-600,
+  .theme-dark .fill-slate-500 {
+    fill: #CBD5E1;
+  }
+
+  .theme-dark .stroke-slate-200,
+  .theme-dark .stroke-slate-300 {
+    stroke: #334155;
+  }
+
   .theme-dark .bg-blue-50 {
     background-color: rgba(59, 130, 246, 0.16);
   }

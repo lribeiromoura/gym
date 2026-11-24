@@ -35,7 +35,11 @@ import {
 import { RestoreBackupModal } from '@/components/profile/RestoreBackupModal';
 import {
   calculateMuscleDistribution,
+  convertVolumeFromKg,
+  convertWeightToKg,
   exportWorkoutsToCSV,
+  formatWeightValue,
+  getWeightUnitLabel,
 } from '@/lib/calculations';
 import {
   enableRestTimerNotifications,
@@ -181,6 +185,8 @@ export function ProfileAnalyticsView() {
   >('weightKg');
 
   const [showAddMeasurement, setShowAddMeasurement] = useState(false);
+  const [measurementError, setMeasurementError] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const [mDate, setMDate] = useState(new Date().toISOString().slice(0, 10));
   const [mWeight, setMWeight] = useState('');
   const [mBodyFat, setMBodyFat] = useState('');
@@ -190,6 +196,22 @@ export function ProfileAnalyticsView() {
   const [mWaist, setMWaist] = useState('');
   const [mThigh, setMThigh] = useState('');
   const [mCalf, setMCalf] = useState('');
+
+  const weightUnit = settings?.weightUnit === 'lbs' ? 'lbs' : 'kg';
+  const unitLabel = getWeightUnitLabel(weightUnit);
+
+  const resetMeasurementForm = () => {
+    setMDate(new Date().toISOString().slice(0, 10));
+    setMWeight('');
+    setMBodyFat('');
+    setMKcal('');
+    setMChest('');
+    setMBicep('');
+    setMWaist('');
+    setMThigh('');
+    setMCalf('');
+    setMeasurementError(null);
+  };
 
   const [csvFeedback, setCsvFeedback] = useState<string | null>(null);
   const [notifStatus, setNotifStatus] = useState<
@@ -270,19 +292,84 @@ export function ProfileAnalyticsView() {
 
   const handleSaveMeasurement = (e: React.FormEvent) => {
     e.preventDefault();
+    setMeasurementError(null);
+
+    if (!mDate || Number.isNaN(new Date(mDate + 'T12:00:00').getTime())) {
+      setMeasurementError('Informe uma data válida.');
+      return;
+    }
+
+    const parseOptionalPositive = (
+      raw: string,
+      label: string,
+      maxVal?: number
+    ): { ok: true; value: number | undefined } | { ok: false; error: string } => {
+      const trimmed = raw.trim();
+      if (!trimmed) return { ok: true, value: undefined };
+      const num = Number(trimmed);
+      if (!Number.isFinite(num) || num <= 0) {
+        return { ok: false, error: `${label} deve ser um valor maior que zero.` };
+      }
+      if (maxVal !== undefined && num > maxVal) {
+        return { ok: false, error: `${label} deve ser no máximo ${maxVal}.` };
+      }
+      return { ok: true, value: num };
+    };
+
+    const parsedWeight = parseOptionalPositive(mWeight, 'Peso corporal', 500);
+    const parsedBf = parseOptionalPositive(mBodyFat, 'Gordura BF (%)', 100);
+    const parsedKcal = parseOptionalPositive(mKcal, 'Calorias', 20000);
+    const parsedChest = parseOptionalPositive(mChest, 'Peito', 300);
+    const parsedBicep = parseOptionalPositive(mBicep, 'Bíceps', 150);
+    const parsedWaist = parseOptionalPositive(mWaist, 'Cintura', 300);
+    const parsedThigh = parseOptionalPositive(mThigh, 'Coxa', 200);
+    const parsedCalf = parseOptionalPositive(mCalf, 'Panturrilha', 150);
+
+    const allChecks = [
+      parsedWeight,
+      parsedBf,
+      parsedKcal,
+      parsedChest,
+      parsedBicep,
+      parsedWaist,
+      parsedThigh,
+      parsedCalf,
+    ];
+    const firstErr = allChecks.find((c) => !c.ok);
+    if (firstErr && !firstErr.ok) {
+      setMeasurementError(firstErr.error);
+      return;
+    }
+
+    const hasAtLeastOne = allChecks.some(
+      (c) => c.ok && c.value !== undefined
+    );
+    if (!hasAtLeastOne) {
+      setMeasurementError(
+        'Preencha pelo menos uma medida corporal antes de salvar.'
+      );
+      return;
+    }
+
+    const weightKgVal =
+      parsedWeight.ok && parsedWeight.value !== undefined
+        ? (convertWeightToKg(parsedWeight.value, weightUnit) ?? undefined)
+        : undefined;
+
     addBodyMeasurement({
       date: mDate,
-      weightKg: mWeight ? Number(mWeight) : undefined,
-      bodyFatPct: mBodyFat ? Number(mBodyFat) : undefined,
-      caloricIntakeKcal: mKcal ? Number(mKcal) : undefined,
-      chestCm: mChest ? Number(mChest) : undefined,
-      leftBicepCm: mBicep ? Number(mBicep) : undefined,
-      rightBicepCm: mBicep ? Number(mBicep) : undefined,
-      waistCm: mWaist ? Number(mWaist) : undefined,
-      leftThighCm: mThigh ? Number(mThigh) : undefined,
-      rightThighCm: mThigh ? Number(mThigh) : undefined,
-      calfCm: mCalf ? Number(mCalf) : undefined,
+      weightKg: weightKgVal,
+      bodyFatPct: parsedBf.ok ? parsedBf.value : undefined,
+      caloricIntakeKcal: parsedKcal.ok ? parsedKcal.value : undefined,
+      chestCm: parsedChest.ok ? parsedChest.value : undefined,
+      leftBicepCm: parsedBicep.ok ? parsedBicep.value : undefined,
+      rightBicepCm: parsedBicep.ok ? parsedBicep.value : undefined,
+      waistCm: parsedWaist.ok ? parsedWaist.value : undefined,
+      leftThighCm: parsedThigh.ok ? parsedThigh.value : undefined,
+      rightThighCm: parsedThigh.ok ? parsedThigh.value : undefined,
+      calfCm: parsedCalf.ok ? parsedCalf.value : undefined,
     });
+    resetMeasurementForm();
     setShowAddMeasurement(false);
   };
 
@@ -298,31 +385,94 @@ export function ProfileAnalyticsView() {
     setCsvFeedback('Arquivo CSV exportado com sucesso!');
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const compressImageFile = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Falha ao ler imagem.'));
+      reader.onload = () => {
+        if (typeof reader.result !== 'string') {
+          reject(new Error('Formato de imagem inválido.'));
+          return;
+        }
+        const img = new Image();
+        img.onerror = () => reject(new Error('Arquivo não é uma imagem válida.'));
+        img.onload = () => {
+          const MAX_EDGE = 960;
+          let { width, height } = img;
+          if (width > MAX_EDGE || height > MAX_EDGE) {
+            if (width >= height) {
+              height = Math.round((height * MAX_EDGE) / width);
+              width = MAX_EDGE;
+            } else {
+              width = Math.round((width * MAX_EDGE) / height);
+              height = MAX_EDGE;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(reader.result as string);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressed = canvas.toDataURL('image/jpeg', 0.78);
+          resolve(compressed);
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target;
+    const file = input.files?.[0];
+    input.value = '';
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        const latestWeight =
-          measurements[measurements.length - 1]?.weightKg || 0;
-        addProgressPhoto({
-          date: new Date().toISOString().slice(0, 10),
-          weightKg: latestWeight,
-          caption: 'Registro de Progresso',
-          pose: 'Frente',
-          dataUrl: reader.result,
-        });
+    setPhotoError(null);
+
+    if (!file.type.startsWith('image/')) {
+      setPhotoError('Selecione um arquivo de imagem válido (JPG, PNG, WebP).');
+      return;
+    }
+
+    try {
+      const dataUrl = await compressImageFile(file);
+      // Protege contra estouro do limite de ~5MB do localStorage
+      const approxCurrentBytes =
+        typeof localStorage !== 'undefined'
+          ? (localStorage.getItem('ironpulse-storage-v3')?.length ?? 0) * 2
+          : 0;
+      const incomingBytes = dataUrl.length * 2;
+      if (approxCurrentBytes + incomingBytes > 4_200_000) {
+        setPhotoError(
+          'Armazenamento local quase cheio. Exclua fotos antigas ou faça um backup antes de adicionar novas fotos.'
+        );
+        return;
       }
-    };
-    reader.readAsDataURL(file);
+
+      const latestWeight =
+        measurements[measurements.length - 1]?.weightKg || 0;
+      addProgressPhoto({
+        date: new Date().toISOString().slice(0, 10),
+        weightKg: latestWeight,
+        caption: 'Registro de Progresso',
+        pose: 'Frente',
+        dataUrl,
+      });
+    } catch {
+      setPhotoError(
+        'Não foi possível processar esta imagem. Tente outra foto.'
+      );
+    }
   };
 
   const MEASURE_LABELS: Record<
     typeof measureMetric,
     { label: string; unit: string }
   > = {
-    weightKg: { label: 'Peso Corporal', unit: 'kg' },
+    weightKg: { label: 'Peso Corporal', unit: unitLabel },
     bodyFatPct: { label: 'Gordura Corporal (BF)', unit: '%' },
     rightBicepCm: { label: 'Bíceps', unit: 'cm' },
     chestCm: { label: 'Peitoral', unit: 'cm' },
@@ -416,7 +566,9 @@ export function ProfileAnalyticsView() {
           </div>
           <div className="text-center">
             <span className="text-lg font-extrabold text-[#0084FF]">
-              {(totalStats.totalVolume / 1000).toFixed(1)}t
+              {weightUnit === 'lbs'
+                ? `${(convertVolumeFromKg(totalStats.totalVolume, 'lbs') / 1000).toFixed(1)}k lbs`
+                : `${(totalStats.totalVolume / 1000).toFixed(1)}t`}
             </span>
             <p className="text-[11px] text-slate-500">Volume Total</p>
           </div>
@@ -548,7 +700,7 @@ export function ProfileAnalyticsView() {
                         key={sIdx}
                         points={pts}
                         fill="none"
-                        stroke="#E2E8F0"
+                        className="stroke-slate-200"
                         strokeWidth="1"
                       />
                     );
@@ -568,14 +720,14 @@ export function ProfileAnalyticsView() {
                           y1="110"
                           x2={x2}
                           y2={y2}
-                          stroke="#E2E8F0"
+                          className="stroke-slate-200"
                           strokeWidth="1"
                         />
                         <text
                           x={lx}
                           y={ly + 3}
                           textAnchor="middle"
-                          fill="#475569"
+                          className="fill-slate-600"
                           fontSize="10"
                           fontWeight="bold"
                         >
@@ -623,10 +775,11 @@ export function ProfileAnalyticsView() {
                             {item.primarySets} diretas + {item.secondarySets}{' '}
                             sin. (
                             <strong className="text-[#0084FF]">
-                              {Math.round(item.volumeKg).toLocaleString(
-                                'pt-BR'
-                              )}{' '}
-                              kg
+                              {convertVolumeFromKg(
+                                item.volumeKg,
+                                weightUnit
+                              ).toLocaleString('pt-BR')}{' '}
+                              {unitLabel}
                             </strong>
                             )
                           </span>
@@ -667,7 +820,7 @@ export function ProfileAnalyticsView() {
                       : 'text-slate-600'
                   }`}
                 >
-                  Volume (kg)
+                  Volume ({unitLabel})
                 </button>
                 <button
                   onClick={() => setChartType('duration')}
@@ -703,7 +856,7 @@ export function ProfileAnalyticsView() {
                   .reverse();
                 const getSessionVal = (w: (typeof displayedSessions)[0]) =>
                   chartType === 'volume'
-                    ? w.totalVolumeKg
+                    ? convertVolumeFromKg(w.totalVolumeKg, weightUnit)
                     : chartType === 'duration'
                     ? Math.round(w.durationSeconds / 60)
                     : w.totalSets;
@@ -771,7 +924,10 @@ export function ProfileAnalyticsView() {
               </p>
             </div>
             <button
-              onClick={() => setShowAddMeasurement(true)}
+              onClick={() => {
+                resetMeasurementForm();
+                setShowAddMeasurement(true);
+              }}
               className="h-11 px-4 rounded-full bg-[#0084FF] hover:bg-blue-600 text-white text-xs font-bold flex items-center gap-1.5"
             >
               <Plus className="w-4 h-4" /> Registrar Medida
@@ -813,7 +969,13 @@ export function ProfileAnalyticsView() {
 
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2">
                   {measurements.map((m) => {
-                    const value = m[measureMetric];
+                    const rawVal = m[measureMetric];
+                    const displayVal =
+                      rawVal !== undefined
+                        ? measureMetric === 'weightKg'
+                          ? formatWeightValue(rawVal, weightUnit)
+                          : String(rawVal).replace('.', ',')
+                        : '—';
                     return (
                       <div
                         key={m.id}
@@ -843,7 +1005,7 @@ export function ProfileAnalyticsView() {
                           </button>
                         </div>
                         <p className="text-xl font-extrabold text-slate-900 mt-1">
-                          {value ?? '—'}{' '}
+                          {displayVal}{' '}
                           <span className="text-xs font-normal text-[#0084FF]">
                             {MEASURE_LABELS[measureMetric].unit}
                           </span>
@@ -878,7 +1040,9 @@ export function ProfileAnalyticsView() {
                           )}
                         </td>
                         <td className="py-3 px-4 font-bold text-slate-900">
-                          {m.weightKg ? `${m.weightKg} kg` : '—'}
+                          {m.weightKg
+                            ? `${formatWeightValue(m.weightKg, weightUnit)} ${unitLabel}`
+                            : '—'}
                         </td>
                         <td className="py-3 px-4 text-emerald-600 font-semibold">
                           {m.bodyFatPct ? `${m.bodyFatPct}%` : '—'}
@@ -936,6 +1100,13 @@ export function ProfileAnalyticsView() {
               />
             </label>
           </div>
+
+          {photoError && (
+            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>{photoError}</span>
+            </div>
+          )}
 
           {progressPhotos.length === 0 ? (
             <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-12 text-center space-y-3">
@@ -1154,7 +1325,7 @@ export function ProfileAnalyticsView() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
                 <div>
                   <label className="block text-slate-600 font-semibold mb-1">
                     Tema da Interface
@@ -1168,14 +1339,34 @@ export function ProfileAnalyticsView() {
                     }
                     className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-slate-900 font-semibold"
                   >
-                    <option value="dark">🌙 Escuro (IronPulse Dark — Padrão)</option>
-                    <option value="light">☀️ Claro (Alto Contraste)</option>
+                    <option value="dark">Escuro (Padrão)</option>
+                    <option value="light">Claro (Alto Contraste)</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-slate-600 font-semibold mb-1">
-                    Meta Semanal (treinos)
+                    Unidade de Peso
+                  </label>
+                  <select
+                    value={weightUnit}
+                    onChange={(e) =>
+                      updateSettings({
+                        weightUnit: e.target.value === 'lbs' ? 'lbs' : 'kg',
+                      })
+                    }
+                    className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-slate-900 font-semibold"
+                  >
+                    <option value="kg">Quilogramas (kg)</option>
+                    <option value="lbs">Libras (lbs)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">
+                    Meta Semanal
                   </label>
                   <select
                     value={settings.weeklyWorkoutGoal || 4}
@@ -1186,19 +1377,17 @@ export function ProfileAnalyticsView() {
                     }
                     className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-slate-900 font-semibold"
                   >
-                    <option value={2}>2 treinos / semana</option>
-                    <option value={3}>3 treinos / semana</option>
-                    <option value={4}>4 treinos / semana</option>
-                    <option value={5}>5 treinos / semana</option>
-                    <option value={6}>6 treinos / semana</option>
+                    <option value={2}>2 treinos / sem</option>
+                    <option value={3}>3 treinos / sem</option>
+                    <option value={4}>4 treinos / sem</option>
+                    <option value={5}>5 treinos / sem</option>
+                    <option value={6}>6 treinos / sem</option>
                   </select>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-600 font-semibold mb-1">
-                    Timer de Descanso Padrão
+                    Descanso Padrão
                   </label>
                   <select
                     value={settings.defaultRestSeconds}
@@ -1218,7 +1407,7 @@ export function ProfileAnalyticsView() {
 
                 <div>
                   <label className="block text-slate-600 font-semibold mb-1">
-                    Peso Padrão da Barra
+                    Peso da Barra
                   </label>
                   <select
                     value={settings.defaultBarWeightKg}
@@ -1353,6 +1542,13 @@ export function ProfileAnalyticsView() {
               </button>
             </div>
 
+            {measurementError && (
+              <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{measurementError}</span>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div className="col-span-2">
                 <label className="block text-slate-600 font-semibold mb-1">
@@ -1360,6 +1556,7 @@ export function ProfileAnalyticsView() {
                 </label>
                 <input
                   type="date"
+                  required
                   value={mDate}
                   onChange={(e) => setMDate(e.target.value)}
                   className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"
@@ -1367,10 +1564,11 @@ export function ProfileAnalyticsView() {
               </div>
               <div>
                 <label className="block text-slate-600 font-semibold mb-1">
-                  Peso Corporal (kg)
+                  Peso Corporal ({unitLabel})
                 </label>
                 <input
                   type="number"
+                  min="0"
                   step="0.1"
                   value={mWeight}
                   onChange={(e) => setMWeight(e.target.value)}
@@ -1383,6 +1581,8 @@ export function ProfileAnalyticsView() {
                 </label>
                 <input
                   type="number"
+                  min="0"
+                  max="100"
                   step="0.1"
                   value={mBodyFat}
                   onChange={(e) => setMBodyFat(e.target.value)}
@@ -1395,6 +1595,7 @@ export function ProfileAnalyticsView() {
                 </label>
                 <input
                   type="number"
+                  min="0"
                   step="0.1"
                   value={mChest}
                   onChange={(e) => setMChest(e.target.value)}
@@ -1407,6 +1608,7 @@ export function ProfileAnalyticsView() {
                 </label>
                 <input
                   type="number"
+                  min="0"
                   step="0.1"
                   value={mBicep}
                   onChange={(e) => setMBicep(e.target.value)}
@@ -1419,6 +1621,7 @@ export function ProfileAnalyticsView() {
                 </label>
                 <input
                   type="number"
+                  min="0"
                   step="0.1"
                   value={mWaist}
                   onChange={(e) => setMWaist(e.target.value)}
@@ -1431,6 +1634,7 @@ export function ProfileAnalyticsView() {
                 </label>
                 <input
                   type="number"
+                  min="0"
                   step="0.1"
                   value={mThigh}
                   onChange={(e) => setMThigh(e.target.value)}
@@ -1443,6 +1647,7 @@ export function ProfileAnalyticsView() {
                 </label>
                 <input
                   type="number"
+                  min="0"
                   step="0.1"
                   value={mCalf}
                   onChange={(e) => setMCalf(e.target.value)}
@@ -1455,6 +1660,7 @@ export function ProfileAnalyticsView() {
                 </label>
                 <input
                   type="number"
+                  min="0"
                   value={mKcal}
                   onChange={(e) => setMKcal(e.target.value)}
                   className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"

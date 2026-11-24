@@ -38,9 +38,15 @@ import { useWorkoutStore } from '@/store/useWorkoutStore';
 import {
   calculateMuscleDistribution,
   calculatePlatesPerSide,
+  convertVolumeFromKg,
+  convertWeightFromKg,
+  convertWeightToKg,
   formatDuration,
   formatTimerClock,
+  formatWeightWithUnit,
   getPreviousExerciseSets,
+  getWeightUnitLabel,
+  isSetFilled,
 } from '@/lib/calculations';
 import { ExerciseDetailModal } from '@/components/exercises/ExerciseDetailModal';
 import { BodyHeatmapSVG } from '@/components/analytics/BodyHeatmapSVG';
@@ -106,6 +112,9 @@ function playTimerBeep() {
     playTone(880, 0);
     playTone(880, 0.28);
     playTone(1174.66, 0.56);
+    setTimeout(() => {
+      ctx.close().catch(() => {});
+    }, 1100);
   } catch {
     // Ignore autoplay errors
   }
@@ -326,15 +335,18 @@ function ExerciseIllustrationBadge({
   gifUrl?: string;
   title?: string;
 }) {
+  const [imgFailed, setImgFailed] = useState(false);
+
   return (
     <div className="w-11 h-11 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 overflow-hidden">
-      {gifUrl ? (
+      {gifUrl && !imgFailed ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={gifUrl}
           alt={title || 'Exercício'}
           loading="lazy"
-          className="w-full h-full object-cover bg-white"
+          onError={() => setImgFailed(true)}
+          className="w-full h-full object-cover"
         />
       ) : (
         <svg viewBox="0 0 48 48" className="w-8 h-8">
@@ -376,11 +388,13 @@ function ExerciseIllustrationBadge({
 function SwipeableSetRow({
   setId,
   completed,
+  showRpeColumn,
   onDelete,
   children,
 }: {
   setId: string;
   completed: boolean;
+  showRpeColumn: boolean;
   onDelete: () => void;
   children: React.ReactNode;
 }) {
@@ -392,6 +406,7 @@ function SwipeableSetRow({
   const startYRef = useRef(0);
   const baseOffsetRef = useRef(0);
   const directionLockedRef = useRef<'horizontal' | 'vertical' | null>(null);
+  const activePointerIdRef = useRef<number | null>(null);
 
   const REVEAL_WIDTH = 92;
   const FULL_SWIPE_DELETE_THRESHOLD = 185;
@@ -404,6 +419,7 @@ function SwipeableSetRow({
   const finishDrag = () => {
     if (!isDraggingRef.current) return;
     isDraggingRef.current = false;
+    activePointerIdRef.current = null;
     setIsDragging(false);
     directionLockedRef.current = null;
 
@@ -429,15 +445,22 @@ function SwipeableSetRow({
     setIsDragging(true);
   };
 
-  const moveDrag = (clientX: number, clientY: number) => {
+  const moveDrag = (
+    clientX: number,
+    clientY: number,
+    onHorizontalLock?: () => void
+  ) => {
     if (!isDraggingRef.current) return;
     const dx = clientX - startXRef.current;
     const dy = clientY - startYRef.current;
 
     if (!directionLockedRef.current) {
-      if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
       directionLockedRef.current =
         Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical';
+      if (directionLockedRef.current === 'horizontal') {
+        onHorizontalLock?.();
+      }
     }
 
     if (directionLockedRef.current === 'vertical') return;
@@ -461,22 +484,40 @@ function SwipeableSetRow({
     finishDrag();
   };
 
-  // Pointer & Mouse Events (Desktop / Mobile / Touchpad)
+  // Pointer & Mouse Events (Desktop / Trackpad) — nunca captura cliques em botões ou inputs
   const handlePointerDown = (e: React.PointerEvent) => {
     if (e.pointerType === 'touch') return; // handled by touch events
-    const tag = (e.target as HTMLElement).tagName;
-    if (tag === 'INPUT') return;
-    e.currentTarget.setPointerCapture?.(e.pointerId);
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('button, input, select, textarea, a')) return;
+    activePointerIdRef.current = e.pointerId;
     beginDrag(e.clientX, e.clientY);
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (e.pointerType === 'touch') return;
-    moveDrag(e.clientX, e.clientY);
+    moveDrag(e.clientX, e.clientY, () => {
+      if (activePointerIdRef.current !== null) {
+        try {
+          e.currentTarget.setPointerCapture?.(activePointerIdRef.current);
+        } catch {
+          // Ignore if pointer already released
+        }
+      }
+    });
   };
 
   const handlePointerUpOrCancel = (e: React.PointerEvent) => {
     if (e.pointerType === 'touch') return;
+    if (
+      activePointerIdRef.current !== null &&
+      e.currentTarget.hasPointerCapture?.(activePointerIdRef.current)
+    ) {
+      try {
+        e.currentTarget.releasePointerCapture?.(activePointerIdRef.current);
+      } catch {
+        // Ignore
+      }
+    }
     finishDrag();
   };
 
@@ -526,7 +567,11 @@ function SwipeableSetRow({
             ? 'none'
             : 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)',
         }}
-        className={`relative z-10 grid grid-cols-12 gap-1.5 items-center px-4 py-1.5 transition-colors ${
+        className={`relative z-10 grid items-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-1.5 transition-colors ${
+          showRpeColumn
+            ? 'grid-cols-[44px_minmax(0,1fr)_56px_48px_44px_44px] sm:grid-cols-[48px_minmax(0,1fr)_88px_76px_52px_44px]'
+            : 'grid-cols-[44px_minmax(0,1fr)_68px_60px_44px] sm:grid-cols-[48px_minmax(0,1fr)_96px_84px_44px]'
+        } ${
           completed
             ? 'bg-emerald-500/14 border-l-3 border-l-emerald-500'
             : 'bg-white'
@@ -540,6 +585,7 @@ function SwipeableSetRow({
 
 export function ActiveWorkoutDrawer() {
   const activeWorkout = useWorkoutStore((s) => s.activeWorkout);
+  const pendingWorkoutReplace = useWorkoutStore((s) => s.pendingWorkoutReplace);
   const exercises = useWorkoutStore((s) => s.exercises);
   const workoutHistory = useWorkoutStore((s) => s.workoutHistory);
   const restTimer = useWorkoutStore((s) => s.restTimer);
@@ -547,6 +593,15 @@ export function ActiveWorkoutDrawer() {
   const lastFinishedWorkout = useWorkoutStore((s) => s.lastFinishedWorkout);
 
   const toggleMinimizeWorkout = useWorkoutStore((s) => s.toggleMinimizeWorkout);
+  const updateActiveWorkoutMeta = useWorkoutStore(
+    (s) => s.updateActiveWorkoutMeta
+  );
+  const confirmPendingWorkoutReplace = useWorkoutStore(
+    (s) => s.confirmPendingWorkoutReplace
+  );
+  const cancelPendingWorkoutReplace = useWorkoutStore(
+    (s) => s.cancelPendingWorkoutReplace
+  );
   const addExerciseToActiveWorkout = useWorkoutStore(
     (s) => s.addExerciseToActiveWorkout
   );
@@ -678,6 +733,9 @@ export function ActiveWorkoutDrawer() {
   } | null>(null);
 
   const showRpeColumn = Boolean(settings?.showRpeColumn);
+  const weightUnit = settings?.weightUnit === 'lbs' ? 'lbs' : 'kg';
+  const unitLabel = getWeightUnitLabel(weightUnit);
+  const lastBeepedEndTimeRef = useRef<number | null>(null);
 
   const isEditingSession = !!activeWorkout?.editingSessionId;
 
@@ -706,7 +764,13 @@ export function ActiveWorkoutDrawer() {
       const rem = restTimer.endTime
         ? Math.max(0, Math.ceil((restTimer.endTime - Date.now()) / 1000))
         : restTimer.remainingSeconds;
-      if (rem === 1 && settings.soundEnabled) {
+      const beepKey = restTimer.endTime ?? -1;
+      if (
+        rem <= 1 &&
+        settings.soundEnabled &&
+        lastBeepedEndTimeRef.current !== beepKey
+      ) {
+        lastBeepedEndTimeRef.current = beepKey;
         playTimerBeep();
       }
       tickRestTimer();
@@ -740,22 +804,23 @@ export function ActiveWorkoutDrawer() {
 
     for (const ex of activeWorkout.exercises) {
       const meta = exerciseMap.get(ex.exerciseId);
+      const countsVolume =
+        meta?.measurementType !== 'duration' &&
+        meta?.measurementType !== 'distance_duration';
       let hasCompletedInEx = false;
       for (const s of ex.sets) {
         totalSets += 1;
         if (s.completed) {
           completedSets += 1;
           hasCompletedInEx = true;
-          if (s.type !== 'warmup') {
+          if (countsVolume && s.type !== 'warmup') {
             volumeKg += (s.weightKg ?? 0) * (s.reps ?? 0);
           }
         }
       }
-      if (meta && (hasCompletedInEx || activeWorkout.exercises.length > 0)) {
-        if (hasCompletedInEx) {
-          activeMuscles.add(meta.primaryMuscle);
-          meta.secondaryMuscles.forEach((m) => activeMuscles.add(m));
-        }
+      if (meta && hasCompletedInEx) {
+        activeMuscles.add(meta.primaryMuscle);
+        meta.secondaryMuscles.forEach((m) => activeMuscles.add(m));
       }
     }
     return {
@@ -777,6 +842,56 @@ export function ActiveWorkoutDrawer() {
     const idx = options.indexOf(currentSeconds);
     return options[(idx + 1) % options.length];
   };
+
+  const pendingReplaceModal = pendingWorkoutReplace ? (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/65 backdrop-blur-sm p-4">
+      <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-6 space-y-4 shadow-2xl animate-fadeIn">
+        <div className="flex items-start gap-3">
+          <div className="w-11 h-11 rounded-2xl bg-amber-100 border border-amber-200 text-amber-600 flex items-center justify-center shrink-0">
+            <AlertTriangle className="w-5 h-5" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-base font-extrabold text-slate-900">
+              Treino em andamento
+            </h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Você já possui o treino{' '}
+              <strong>&ldquo;{activeWorkout?.title}&rdquo;</strong> aberto. Se
+              iniciar{' '}
+              <strong>&ldquo;{pendingWorkoutReplace.targetTitle}&rdquo;</strong>
+              , o progresso atual não salvo será descartado.
+            </p>
+          </div>
+        </div>
+        <div className="space-y-2 pt-1">
+          <button
+            type="button"
+            onClick={() => {
+              cancelPendingWorkoutReplace();
+              toggleMinimizeWorkout(false);
+            }}
+            className="w-full h-11 rounded-xl bg-[#2563EB] hover:bg-blue-600 text-white text-xs sm:text-sm font-bold transition"
+          >
+            Retomar treino atual
+          </button>
+          <button
+            type="button"
+            onClick={confirmPendingWorkoutReplace}
+            className="w-full h-11 rounded-xl bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 text-xs sm:text-sm font-bold transition"
+          >
+            Descartar atual e iniciar novo
+          </button>
+          <button
+            type="button"
+            onClick={cancelPendingWorkoutReplace}
+            className="w-full h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition"
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   // Modal de celebração pós-treino
   if (!activeWorkout && lastFinishedWorkout) {
@@ -806,7 +921,11 @@ export function ActiveWorkoutDrawer() {
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-center">
               <span className="text-[11px] text-slate-500">Volume Total</span>
               <p className="text-base font-extrabold text-slate-900 mt-0.5">
-                {lastFinishedWorkout.totalVolumeKg.toLocaleString('pt-BR')} kg
+                {convertVolumeFromKg(
+                  lastFinishedWorkout.totalVolumeKg,
+                  weightUnit
+                ).toLocaleString('pt-BR')}{' '}
+                {unitLabel}
               </p>
             </div>
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-center">
@@ -841,52 +960,55 @@ export function ActiveWorkoutDrawer() {
     );
   }
 
-  if (!activeWorkout) return null;
+  if (!activeWorkout) return pendingReplaceModal;
 
   // Mini-Player ancorado logo acima da barra de navegação inferior mobile (sem sobreposição)
   if (activeWorkout.isMinimized) {
     return (
-      <div className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-4 inset-x-0 md:left-72 md:right-6 z-40 px-2 md:px-0">
-        <div className="bg-[#1E293B] text-[#F8FAFC] border-t-2 border-t-[#3B82F6] border border-[#243044] rounded-2xl px-3.5 py-2.5 shadow-2xl flex items-center justify-between gap-3">
-          <div
-            onClick={() => toggleMinimizeWorkout(false)}
-            className="flex items-center gap-3 cursor-pointer flex-1 min-w-0 min-h-[44px]"
-          >
-            <div className="w-10 h-10 rounded-xl bg-[#2563EB] text-white flex items-center justify-center shrink-0">
-              <Dumbbell className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-xs font-bold text-[#3B82F6]">
-                  Em andamento
-                </span>
-                <span className="text-xs font-mono font-semibold text-[#94A3B8] tabular-nums">
-                  • {formatShortElapsed(elapsedSeconds)}
-                </span>
-              </div>
-              <p className="text-sm font-bold text-[#F8FAFC] truncate">
-                {activeWorkout.title}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            {restTimer.isActive && (
-              <div className="h-11 px-3 rounded-xl bg-[#3B82F6]/20 border border-[#3B82F6]/40 text-[#60A5FA] text-xs font-mono font-bold flex items-center gap-1 tabular-nums">
-                <Timer className="w-3.5 h-3.5" />
-                {formatTimerClock(restTimer.remainingSeconds)}
-              </div>
-            )}
-            <button
+      <>
+        <div className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-4 inset-x-0 md:left-72 md:right-6 z-40 px-2 md:px-0">
+          <div className="bg-[#1E293B] text-[#F8FAFC] border-t-2 border-t-[#3B82F6] border border-[#243044] rounded-2xl px-3.5 py-2.5 shadow-2xl flex items-center justify-between gap-3">
+            <div
               onClick={() => toggleMinimizeWorkout(false)}
-              className="h-11 px-4 rounded-xl bg-[#2563EB] hover:bg-blue-600 text-white text-xs font-bold flex items-center gap-1 shadow-sm"
+              className="flex items-center gap-3 cursor-pointer flex-1 min-w-0 min-h-[44px]"
             >
-              <ChevronUp className="w-4 h-4" /> Retomar
-            </button>
+              <div className="w-10 h-10 rounded-xl bg-[#2563EB] text-white flex items-center justify-center shrink-0">
+                <Dumbbell className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-xs font-bold text-[#3B82F6]">
+                    Em andamento
+                  </span>
+                  <span className="text-xs font-mono font-semibold text-[#94A3B8] tabular-nums">
+                    • {formatShortElapsed(elapsedSeconds)}
+                  </span>
+                </div>
+                <p className="text-sm font-bold text-[#F8FAFC] truncate">
+                  {activeWorkout.title}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {restTimer.isActive && (
+                <div className="h-11 px-3 rounded-xl bg-[#3B82F6]/20 border border-[#3B82F6]/40 text-[#60A5FA] text-xs font-mono font-bold flex items-center gap-1 tabular-nums">
+                  <Timer className="w-3.5 h-3.5" />
+                  {formatTimerClock(restTimer.remainingSeconds)}
+                </div>
+              )}
+              <button
+                onClick={() => toggleMinimizeWorkout(false)}
+                className="h-11 px-4 rounded-xl bg-[#2563EB] hover:bg-blue-600 text-white text-xs font-bold flex items-center gap-1 shadow-sm"
+              >
+                <ChevronUp className="w-4 h-4" /> Retomar
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+        {pendingReplaceModal}
+      </>
     );
   }
 
@@ -927,11 +1049,13 @@ export function ActiveWorkoutDrawer() {
             <AlarmClock className="w-5 h-5 stroke-[2]" />
           </button>
           <button
-            onClick={() =>
-              isEditingSession
-                ? finishActiveWorkout(false)
-                : setShowFinishModal(true)
-            }
+            onClick={() => {
+              if (isEditingSession && liveStats.completedSets > 0) {
+                finishActiveWorkout(false);
+              } else {
+                setShowFinishModal(true);
+              }
+            }}
             className="h-11 px-5 rounded-full bg-[#2563EB] hover:bg-blue-600 text-white font-semibold text-[15px] shadow-sm flex items-center justify-center transition"
           >
             Concluir
@@ -959,7 +1083,10 @@ export function ActiveWorkoutDrawer() {
           <div>
             <span className="text-xs text-slate-400 block">Volume</span>
             <span className="text-[15px] font-medium text-slate-900 mt-0.5 block">
-              {liveStats.volumeKg.toLocaleString('pt-BR')} kg
+              {convertVolumeFromKg(liveStats.volumeKg, weightUnit).toLocaleString(
+                'pt-BR'
+              )}{' '}
+              {unitLabel}
             </span>
           </div>
           <div>
@@ -1006,6 +1133,30 @@ export function ActiveWorkoutDrawer() {
 
       {/* ================= CORPO ROLÁVEL DOS EXERCÍCIOS ================= */}
       <div className="flex-1 overflow-y-auto divide-y divide-slate-100 pb-36 max-w-3xl w-full mx-auto">
+        {/* Título e Descrição Editáveis do Treino */}
+        <div className="px-4 py-3.5 bg-white space-y-2">
+          <input
+            type="text"
+            aria-label="Título do treino"
+            value={activeWorkout.title}
+            onChange={(e) =>
+              updateActiveWorkoutMeta(e.target.value, activeWorkout.description)
+            }
+            placeholder="Nome do treino (ex: Treino A — Peito e Tríceps)"
+            className="w-full h-11 px-3.5 rounded-xl bg-slate-50 border border-slate-200 text-base font-extrabold text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#3B82F6]"
+          />
+          <input
+            type="text"
+            aria-label="Descrição do treino"
+            value={activeWorkout.description}
+            onChange={(e) =>
+              updateActiveWorkoutMeta(activeWorkout.title, e.target.value)
+            }
+            placeholder="Notas gerais da sessão (opcional)..."
+            className="w-full h-11 px-3.5 rounded-xl bg-slate-50 border border-slate-200 text-base text-slate-700 placeholder-slate-400 focus:outline-none focus:border-[#3B82F6]"
+          />
+        </div>
+
         {activeWorkout.exercises.length === 0 ? (
           <div className="p-10 text-center space-y-4">
             <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
@@ -1026,7 +1177,8 @@ export function ActiveWorkoutDrawer() {
             const prevSets = getPreviousExerciseSets(
               workoutEx.exerciseId,
               workoutHistory,
-              activeWorkout.editingSessionId
+              activeWorkout.editingSessionId,
+              activeWorkout.editingSessionId ? activeWorkout.startTime : null
             );
             const prevWorkingSets = prevSets.filter(
               (ps) => ps.type !== 'warmup'
@@ -1077,7 +1229,7 @@ export function ActiveWorkoutDrawer() {
                   </button>
                 </div>
 
-                {/* Linha 2: Pílulas [⏱ Descanso] [🧮 Anilhas] e [📄+ Nota] */}
+                {/* Linha 2: Pílulas [Descanso] [Anilhas] e [Nota] */}
                 <div className="px-4 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
@@ -1125,7 +1277,7 @@ export function ActiveWorkoutDrawer() {
                         className="h-11 px-3.5 rounded-xl bg-[#F1F5F9] hover:bg-slate-200 text-slate-900 text-sm font-medium flex items-center gap-2 transition"
                       >
                         <Calculator className="w-4 h-4 text-[#3B82F6]" />
-                        <span>🧮 Anilhas</span>
+                        <span>Anilhas</span>
                       </button>
                     )}
 
@@ -1202,37 +1354,35 @@ export function ActiveWorkoutDrawer() {
                   </div>
                 )}
 
-                {/* Tabela de Séries (SÉRIE | ANTERIOR | KG | REPS | [RPE] | ✓) */}
+                {/* Tabela de Séries (SÉRIE | ANTERIOR | KG/LBS | REPS | [RPE] | ✓) */}
                 <div className="space-y-1 pt-1">
-                  <div className="grid grid-cols-12 gap-1.5 px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500 items-center">
-                    <div className="col-span-2 text-left">SÉRIE</div>
-                    <div className="col-span-3 text-left">ANTERIOR</div>
-                    <div
-                      className={`${
-                        showRpeColumn ? 'col-span-2' : 'col-span-3'
-                      } text-center flex items-center justify-center gap-1`}
-                    >
-                      <Dumbbell className="w-3.5 h-3.5" />
+                  <div
+                    className={`grid items-center gap-1 sm:gap-1.5 px-3 sm:px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500 ${
+                      showRpeColumn
+                        ? 'grid-cols-[44px_minmax(0,1fr)_56px_48px_44px_44px] sm:grid-cols-[48px_minmax(0,1fr)_88px_76px_52px_44px]'
+                        : 'grid-cols-[44px_minmax(0,1fr)_68px_60px_44px] sm:grid-cols-[48px_minmax(0,1fr)_96px_84px_44px]'
+                    }`}
+                  >
+                    <div className="text-center">SÉRIE</div>
+                    <div className="text-left pl-1">ANTERIOR</div>
+                    <div className="text-center flex items-center justify-center gap-1">
+                      <Dumbbell className="w-3.5 h-3.5 shrink-0 hidden sm:inline" />
                       <span>
                         {meta?.measurementType === 'distance_duration'
                           ? 'KM'
-                          : 'KG'}
+                          : meta?.measurementType === 'duration'
+                          ? 'EXTRA'
+                          : unitLabel.toUpperCase()}
                       </span>
                     </div>
-                    <div
-                      className={`${
-                        showRpeColumn ? 'col-span-2' : 'col-span-3'
-                      } text-center`}
-                    >
+                    <div className="text-center">
                       {meta?.measurementType === 'duration' ||
                       meta?.measurementType === 'distance_duration'
                         ? 'SEG'
                         : 'REPS'}
                     </div>
-                    {showRpeColumn && (
-                      <div className="col-span-2 text-center">RPE</div>
-                    )}
-                    <div className="col-span-1 text-center">✓</div>
+                    {showRpeColumn && <div className="text-center">RPE</div>}
+                    <div className="text-center">✓</div>
                   </div>
 
                   {workoutEx.sets.map((s) => {
@@ -1249,7 +1399,9 @@ export function ActiveWorkoutDrawer() {
                     const hasPrevValues =
                       Boolean(prevSet) &&
                       ((prevSet?.weightKg ?? 0) > 0 ||
-                        (prevSet?.reps ?? 0) > 0);
+                        (prevSet?.reps ?? 0) > 0 ||
+                        (prevSet?.durationSeconds ?? 0) > 0 ||
+                        (prevSet?.distanceKm ?? 0) > 0);
                     const setLabel =
                       s.type === 'warmup'
                         ? 'W'
@@ -1259,17 +1411,39 @@ export function ActiveWorkoutDrawer() {
                         ? 'F'
                         : String(normalSetCounter);
 
+                    const prevDisplayText = (() => {
+                      if (!prevSet) return '';
+                      if (meta?.measurementType === 'duration') {
+                        return `${prevSet.durationSeconds ?? 0}s`;
+                      }
+                      if (meta?.measurementType === 'distance_duration') {
+                        return `${formatPtBrNumber(prevSet.distanceKm ?? 0)}km • ${prevSet.durationSeconds ?? 0}s`;
+                      }
+                      if (
+                        (meta?.measurementType === 'bodyweight_reps' ||
+                          meta?.measurementType === 'assisted_bodyweight') &&
+                        (prevSet.weightKg ?? 0) <= 0
+                      ) {
+                        return `${prevSet.reps ?? 0} reps`;
+                      }
+                      return `${formatWeightWithUnit(
+                        prevSet.weightKg ?? 0,
+                        weightUnit
+                      )} × ${prevSet.reps ?? 0}`;
+                    })();
+
                     return (
                       <SwipeableSetRow
                         key={s.id}
                         setId={s.id}
                         completed={s.completed}
+                        showRpeColumn={showRpeColumn}
                         onDelete={() =>
                           removeSetFromActiveExercise(workoutEx.id, s.id)
                         }
                       >
                         {/* SÉRIE (1, 2, 3, W, D, F) — Abre Bottom Sheet de Série */}
-                        <div className="col-span-2 flex items-center">
+                        <div className="flex items-center justify-center">
                           <button
                             type="button"
                             aria-label={`Opções e tipo da série ${setLabel}`}
@@ -1298,25 +1472,27 @@ export function ActiveWorkoutDrawer() {
                         </div>
 
                         {/* ANTERIOR (min-h-[44px] com ícone sutil ↵) */}
-                        <div className="col-span-3">
+                        <div className="min-w-0 pl-1">
                           <button
                             type="button"
-                            aria-label="Copiar peso e repetições anteriores"
+                            aria-label="Copiar valores da série anterior"
                             onClick={() => {
                               if (prevSet) {
                                 updateActiveSet(workoutEx.id, s.id, {
                                   weightKg: prevSet.weightKg,
                                   reps: prevSet.reps,
+                                  distanceKm: prevSet.distanceKm ?? null,
+                                  durationSeconds:
+                                    prevSet.durationSeconds ?? null,
                                 });
                               }
                             }}
-                            className="min-h-[44px] w-full text-sm text-slate-500 font-medium flex items-center gap-1 text-left tabular-nums"
+                            className="min-h-[44px] w-full text-xs sm:text-sm text-slate-500 font-medium flex items-center gap-1 text-left tabular-nums"
                           >
                             {hasPrevValues && prevSet ? (
                               <>
                                 <span className="truncate">
-                                  {formatPtBrNumber(prevSet.weightKg ?? 0)}kg ×{' '}
-                                  {prevSet.reps ?? 0}
+                                  {prevDisplayText}
                                 </span>
                                 <span
                                   aria-hidden="true"
@@ -1335,12 +1511,8 @@ export function ActiveWorkoutDrawer() {
                           </button>
                         </div>
 
-                        {/* KG */}
-                        <div
-                          className={
-                            showRpeColumn ? 'col-span-2' : 'col-span-3'
-                          }
-                        >
+                        {/* KG / LBS / KM */}
+                        <div className="min-w-0">
                           {meta?.measurementType === 'distance_duration' ? (
                             <DecimalInput
                               value={s.distanceKm}
@@ -1350,7 +1522,7 @@ export function ActiveWorkoutDrawer() {
                                   distanceKm: val,
                                 })
                               }
-                              className={`w-full h-11 text-center rounded-xl text-base tabular-nums font-semibold focus:outline-none ${
+                              className={`w-full h-11 px-1 text-center rounded-xl text-base tabular-nums font-semibold focus:outline-none ${
                                 s.completed
                                   ? 'bg-transparent text-slate-900 font-bold'
                                   : 'bg-[#F1F5F9] border border-slate-200 text-slate-900 focus:border-[#3B82F6]'
@@ -1358,14 +1530,17 @@ export function ActiveWorkoutDrawer() {
                             />
                           ) : (
                             <DecimalInput
-                              value={s.weightKg}
-                              ariaLabel="Peso (kg)"
+                              value={convertWeightFromKg(s.weightKg, weightUnit)}
+                              placeholder={
+                                meta?.measurementType === 'duration' ? '—' : '0'
+                              }
+                              ariaLabel={`Peso (${unitLabel})`}
                               onChange={(val) =>
                                 updateActiveSet(workoutEx.id, s.id, {
-                                  weightKg: val,
+                                  weightKg: convertWeightToKg(val, weightUnit),
                                 })
                               }
-                              className={`w-full h-11 text-center rounded-xl text-base tabular-nums font-semibold focus:outline-none ${
+                              className={`w-full h-11 px-1 text-center rounded-xl text-base tabular-nums font-semibold focus:outline-none ${
                                 s.completed
                                   ? 'bg-transparent text-slate-900 font-bold'
                                   : 'bg-[#F1F5F9] border border-slate-200 text-slate-900 focus:border-[#3B82F6]'
@@ -1374,12 +1549,8 @@ export function ActiveWorkoutDrawer() {
                           )}
                         </div>
 
-                        {/* REPS */}
-                        <div
-                          className={
-                            showRpeColumn ? 'col-span-2' : 'col-span-3'
-                          }
-                        >
+                        {/* REPS / SEG */}
+                        <div className="min-w-0">
                           {meta?.measurementType === 'duration' ||
                           meta?.measurementType === 'distance_duration' ? (
                             <IntegerInput
@@ -1390,7 +1561,7 @@ export function ActiveWorkoutDrawer() {
                                   durationSeconds: val,
                                 })
                               }
-                              className={`w-full h-11 text-center rounded-xl text-base tabular-nums font-semibold focus:outline-none ${
+                              className={`w-full h-11 px-1 text-center rounded-xl text-base tabular-nums font-semibold focus:outline-none ${
                                 s.completed
                                   ? 'bg-transparent text-slate-900 font-bold'
                                   : 'bg-[#F1F5F9] border border-slate-200 text-slate-900 focus:border-[#3B82F6]'
@@ -1405,7 +1576,7 @@ export function ActiveWorkoutDrawer() {
                                   reps: val,
                                 })
                               }
-                              className={`w-full h-11 text-center rounded-xl text-base tabular-nums font-semibold focus:outline-none ${
+                              className={`w-full h-11 px-1 text-center rounded-xl text-base tabular-nums font-semibold focus:outline-none ${
                                 s.completed
                                   ? 'bg-transparent text-slate-900 font-bold'
                                   : 'bg-[#F1F5F9] border border-slate-200 text-slate-900 focus:border-[#3B82F6]'
@@ -1416,7 +1587,7 @@ export function ActiveWorkoutDrawer() {
 
                         {/* RPE (Opcional — Divulgação Progressiva) */}
                         {showRpeColumn && (
-                          <div className="col-span-2 flex justify-center">
+                          <div className="flex justify-center">
                             <button
                               type="button"
                               onClick={() =>
@@ -1445,14 +1616,14 @@ export function ActiveWorkoutDrawer() {
                         )}
 
                         {/* Checkbox ✓ (w-11 h-11 = 44x44px) */}
-                        <div className="col-span-1 flex justify-end">
+                        <div className="flex justify-center">
                           <button
                             type="button"
                             aria-label="Marcar série como concluída"
                             onClick={() =>
                               toggleCompleteSet(workoutEx.id, s.id)
                             }
-                            className={`w-11 h-11 min-w-[44px] rounded-xl flex items-center justify-center transition ${
+                            className={`w-11 h-11 rounded-xl flex items-center justify-center transition ${
                               s.completed
                                 ? 'bg-[#059669] text-white shadow-sm'
                                 : 'bg-[#F1F5F9] text-slate-500 hover:text-slate-900'
@@ -1679,7 +1850,7 @@ export function ActiveWorkoutDrawer() {
                 className="min-h-[48px] px-4 py-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-700 font-bold text-sm flex items-center justify-center gap-2 transition"
               >
                 <Flame className="w-4 h-4 shrink-0" />
-                <span>🔥 Gerar Séries de Aquecimento (50% e 75%)</span>
+                <span>Gerar Séries de Aquecimento (50% e 75%)</span>
               </button>
 
               <button
@@ -1694,7 +1865,7 @@ export function ActiveWorkoutDrawer() {
                 className="min-h-[48px] px-4 py-3 rounded-2xl bg-red-50 border border-red-200 text-red-600 font-bold text-sm flex items-center justify-center gap-2 transition"
               >
                 <Trash2 className="w-4 h-4 shrink-0" />
-                <span>🗑 Excluir Série</span>
+                <span>Excluir Série</span>
               </button>
             </div>
           </div>
@@ -1719,8 +1890,9 @@ export function ActiveWorkoutDrawer() {
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="text-xs font-bold uppercase tracking-wider text-[#3B82F6] block">
-                      🧮 Calculadora de Anilhas
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#3B82F6] flex items-center gap-1.5">
+                      <Calculator className="w-3.5 h-3.5" />
+                      Calculadora de Anilhas
                     </span>
                     <h3 className="text-base font-extrabold text-slate-900">
                       {plateCalcModal.exerciseTitle}
@@ -1903,7 +2075,7 @@ export function ActiveWorkoutDrawer() {
               >
                 <Flame className="w-5 h-5 text-amber-500" />
                 <span className="text-[16px] font-medium text-slate-900">
-                  🔥 Gerar 2 séries de aquecimento (50% e 75%)
+                  Gerar 2 séries de aquecimento (50% e 75%)
                 </span>
               </button>
 
@@ -1937,7 +2109,7 @@ export function ActiveWorkoutDrawer() {
               >
                 <Calculator className="w-5 h-5 text-[#3B82F6]" />
                 <span className="text-[16px] font-medium text-slate-900">
-                  🧮 Calculadora de anilhas por lado
+                  Calculadora de anilhas por lado
                 </span>
               </button>
 
@@ -2306,32 +2478,56 @@ export function ActiveWorkoutDrawer() {
       {showFinishModal &&
         (() => {
           const unmarkedFilledSetsCount = activeWorkout.exercises.reduce(
-            (acc, ex) =>
-              acc +
-              ex.sets.filter(
-                (s) =>
-                  !s.completed &&
-                  (((s.weightKg ?? 0) > 0 && (s.reps ?? 0) > 0) ||
-                    (s.durationSeconds ?? 0) > 0)
-              ).length,
+            (acc, ex) => {
+              const meta = exerciseMap.get(ex.exerciseId);
+              return (
+                acc +
+                ex.sets.filter(
+                  (s) => !s.completed && isSetFilled(s, meta?.measurementType)
+                ).length
+              );
+            },
             0
           );
+          const hasAnySavableSet =
+            liveStats.completedSets > 0 || unmarkedFilledSetsCount > 0;
 
           return (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-sm p-4">
               <div className="bg-white rounded-3xl w-full max-w-md p-6 space-y-5 shadow-2xl">
                 <h3 className="text-lg font-extrabold text-slate-900">
-                  Concluir Treino?
+                  {hasAnySavableSet
+                    ? 'Concluir Treino?'
+                    : 'Nenhuma série concluída'}
                 </h3>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Você marcou{' '}
-                  <strong>{liveStats.completedSets} séries concluídas</strong>{' '}
-                  com um volume total de{' '}
-                  <strong>
-                    {liveStats.volumeKg.toLocaleString('pt-BR')} kg
-                  </strong>
-                  .
-                </p>
+
+                {!hasAnySavableSet ? (
+                  <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 space-y-1.5">
+                    <div className="flex items-center gap-2 font-extrabold text-xs">
+                      <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
+                      <span>Treino vazio não pode ser salvo</span>
+                    </div>
+                    <p className="text-xs leading-relaxed">
+                      Marque ao menos uma série como concluída (✓) antes de
+                      salvar no histórico, ou descarte o treino caso não deseje
+                      registrá-lo.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Você marcou{' '}
+                    <strong>{liveStats.completedSets} séries concluídas</strong>{' '}
+                    com um volume total de{' '}
+                    <strong>
+                      {convertVolumeFromKg(
+                        liveStats.volumeKg,
+                        weightUnit
+                      ).toLocaleString('pt-BR')}{' '}
+                      {unitLabel}
+                    </strong>
+                    .
+                  </p>
+                )}
 
                 {unmarkedFilledSetsCount > 0 && (
                   <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 space-y-1.5">
@@ -2347,9 +2543,8 @@ export function ActiveWorkoutDrawer() {
                     <p className="text-xs leading-relaxed">
                       Encontramos {unmarkedFilledSetsCount}{' '}
                       {unmarkedFilledSetsCount === 1 ? 'série' : 'séries'} com
-                      peso e repetições digitados sem o check <strong>✓</strong>
-                      . Deseja marcá-las automaticamente para não perder seu
-                      registro?
+                      valores preenchidos sem o check <strong>✓</strong>. Deseja
+                      marcá-las automaticamente para não perder seu registro?
                     </p>
                   </div>
                 )}
@@ -2369,53 +2564,67 @@ export function ActiveWorkoutDrawer() {
                     >
                       <Check className="w-4 h-4 stroke-[2.5] shrink-0" />
                       <span>
-                        ✓ Marcar todas as {unmarkedFilledSetsCount} séries
+                        Marcar todas as {unmarkedFilledSetsCount} séries
                         preenchidas e Concluir
                       </span>
                     </button>
                   )}
 
-                  {activeWorkout.routineId ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowFinishModal(false);
-                          finishActiveWorkout(true, false);
-                        }}
-                        className="w-full min-h-[44px] py-3 rounded-xl bg-[#2563EB] hover:bg-blue-600 text-white font-bold text-xs sm:text-sm transition"
-                      >
-                        {unmarkedFilledSetsCount > 0
-                          ? `Concluir apenas com as marcadas (${liveStats.completedSets}) e Atualizar Rotina`
-                          : 'Concluir e Atualizar Rotina'}
-                      </button>
+                  {liveStats.completedSets > 0 &&
+                    (activeWorkout.routineId ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowFinishModal(false);
+                            finishActiveWorkout(true, false);
+                          }}
+                          className="w-full min-h-[44px] py-3 rounded-xl bg-[#2563EB] hover:bg-blue-600 text-white font-bold text-xs sm:text-sm transition"
+                        >
+                          {unmarkedFilledSetsCount > 0
+                            ? `Concluir apenas com as marcadas (${liveStats.completedSets}) e Atualizar Rotina`
+                            : 'Concluir e Atualizar Rotina'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowFinishModal(false);
+                            finishActiveWorkout(false, false);
+                          }}
+                          className="w-full min-h-[44px] py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs sm:text-sm transition"
+                        >
+                          Concluir (Manter Rotina Original)
+                        </button>
+                      </>
+                    ) : (
                       <button
                         type="button"
                         onClick={() => {
                           setShowFinishModal(false);
                           finishActiveWorkout(false, false);
                         }}
-                        className="w-full min-h-[44px] py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs sm:text-sm transition"
+                        className={`w-full min-h-[44px] py-3 rounded-xl font-bold text-sm transition ${
+                          unmarkedFilledSetsCount > 0
+                            ? 'bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs sm:text-sm'
+                            : 'bg-[#2563EB] hover:bg-blue-600 text-white'
+                        }`}
                       >
-                        Concluir (Manter Rotina Original)
+                        {unmarkedFilledSetsCount > 0
+                          ? `Concluir apenas com as séries marcadas (${liveStats.completedSets})`
+                          : 'Confirmar e Salvar Treino'}
                       </button>
-                    </>
-                  ) : (
+                    ))}
+
+                  {!hasAnySavableSet && (
                     <button
                       type="button"
                       onClick={() => {
                         setShowFinishModal(false);
-                        finishActiveWorkout(false, false);
+                        discardActiveWorkout();
                       }}
-                      className={`w-full min-h-[44px] py-3 rounded-xl font-bold text-sm transition ${
-                        unmarkedFilledSetsCount > 0
-                          ? 'bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs sm:text-sm'
-                          : 'bg-[#2563EB] hover:bg-blue-600 text-white'
-                      }`}
+                      className="w-full min-h-[44px] py-3 rounded-xl bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 font-bold text-xs sm:text-sm transition"
                     >
-                      {unmarkedFilledSetsCount > 0
-                        ? `Concluir apenas com as séries marcadas (${liveStats.completedSets})`
-                        : 'Confirmar e Salvar Treino'}
+                      Descartar Treino Vazio
                     </button>
                   )}
                 </div>
@@ -2436,6 +2645,7 @@ export function ActiveWorkoutDrawer() {
         exercise={inspectExercise}
         onClose={() => setInspectExercise(null)}
       />
+      {pendingReplaceModal}
     </div>
   );
 }

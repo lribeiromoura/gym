@@ -1,10 +1,170 @@
 import {
   Exercise,
+  ExerciseMeasurementType,
   MuscleGroup,
   WorkoutExercise,
   WorkoutSession,
   WorkoutSet,
 } from '@/types/workout';
+
+export const KG_TO_LBS = 2.2046226218;
+
+export function getWeightUnitLabel(unit: 'kg' | 'lbs' = 'kg'): string {
+  return unit === 'lbs' ? 'lbs' : 'kg';
+}
+
+export function convertWeightFromKg(
+  weightKg: number | null | undefined,
+  unit: 'kg' | 'lbs' = 'kg'
+): number | null {
+  if (weightKg === null || weightKg === undefined || Number.isNaN(weightKg)) {
+    return null;
+  }
+  if (unit === 'lbs') {
+    return Math.round(weightKg * KG_TO_LBS * 10) / 10;
+  }
+  return Math.round(weightKg * 100) / 100;
+}
+
+export function convertWeightToKg(
+  displayWeight: number | null | undefined,
+  unit: 'kg' | 'lbs' = 'kg'
+): number | null {
+  if (
+    displayWeight === null ||
+    displayWeight === undefined ||
+    Number.isNaN(displayWeight)
+  ) {
+    return null;
+  }
+  if (unit === 'lbs') {
+    return Math.round((displayWeight / KG_TO_LBS) * 100) / 100;
+  }
+  return displayWeight;
+}
+
+export function formatWeightValue(
+  weightKg: number | null | undefined,
+  unit: 'kg' | 'lbs' = 'kg'
+): string {
+  const converted = convertWeightFromKg(weightKg, unit);
+  if (converted === null) return '';
+  return String(converted).replace('.', ',');
+}
+
+export function formatWeightWithUnit(
+  weightKg: number | null | undefined,
+  unit: 'kg' | 'lbs' = 'kg',
+  space = false
+): string {
+  const val = formatWeightValue(weightKg ?? 0, unit) || '0';
+  const suffix = getWeightUnitLabel(unit);
+  return space ? `${val} ${suffix}` : `${val}${suffix}`;
+}
+
+export function convertVolumeFromKg(
+  volumeKg: number,
+  unit: 'kg' | 'lbs' = 'kg'
+): number {
+  if (unit === 'lbs') {
+    return Math.round(volumeKg * KG_TO_LBS);
+  }
+  return Math.round(volumeKg);
+}
+
+/**
+ * Verifica se uma série possui dados preenchidos de acordo com o tipo de medição do exercício.
+ */
+export function isSetFilled(
+  set: WorkoutSet,
+  measurementType: ExerciseMeasurementType = 'weight_reps'
+): boolean {
+  switch (measurementType) {
+    case 'bodyweight_reps':
+    case 'assisted_bodyweight':
+      return (set.reps ?? 0) > 0;
+    case 'duration':
+      return (set.durationSeconds ?? 0) > 0;
+    case 'distance_duration':
+      return (set.distanceKm ?? 0) > 0 || (set.durationSeconds ?? 0) > 0;
+    case 'weight_reps':
+    default:
+      return (set.weightKg ?? 0) > 0 && (set.reps ?? 0) > 0;
+  }
+}
+
+/**
+ * Retorna os valores padrão para uma nova série respeitando o tipo de medição do exercício.
+ */
+export function createDefaultSetValues(
+  measurementType: ExerciseMeasurementType = 'weight_reps',
+  prevSet?: WorkoutSet
+): Pick<WorkoutSet, 'weightKg' | 'reps' | 'distanceKm' | 'durationSeconds'> {
+  switch (measurementType) {
+    case 'duration':
+      return {
+        weightKg: null,
+        reps: null,
+        distanceKm: null,
+        durationSeconds: prevSet?.durationSeconds ?? null,
+      };
+    case 'distance_duration':
+      return {
+        weightKg: null,
+        reps: null,
+        distanceKm: prevSet?.distanceKm ?? null,
+        durationSeconds: prevSet?.durationSeconds ?? null,
+      };
+    case 'bodyweight_reps':
+    case 'assisted_bodyweight':
+      return {
+        weightKg: prevSet?.weightKg ?? 0,
+        reps: prevSet?.reps ?? 10,
+        distanceKm: null,
+        durationSeconds: null,
+      };
+    case 'weight_reps':
+    default:
+      return {
+        weightKg: prevSet?.weightKg ?? 20,
+        reps: prevSet?.reps ?? 10,
+        distanceKm: null,
+        durationSeconds: null,
+      };
+  }
+}
+
+/**
+ * Formata uma série para exibição no histórico respeitando o tipo de medição e unidade de peso.
+ */
+export function formatSetSummary(
+  set: WorkoutSet,
+  measurementType: ExerciseMeasurementType = 'weight_reps',
+  unit: 'kg' | 'lbs' = 'kg'
+): string {
+  if (measurementType === 'duration') {
+    const secs = set.durationSeconds ?? 0;
+    return secs > 0 ? formatDuration(secs) : '0s';
+  }
+  if (measurementType === 'distance_duration') {
+    const parts: string[] = [];
+    if ((set.distanceKm ?? 0) > 0) {
+      parts.push(`${String(set.distanceKm).replace('.', ',')} km`);
+    }
+    if ((set.durationSeconds ?? 0) > 0) {
+      parts.push(formatDuration(set.durationSeconds ?? 0));
+    }
+    return parts.length > 0 ? parts.join(' • ') : '0 km • 0s';
+  }
+  if (
+    (measurementType === 'bodyweight_reps' ||
+      measurementType === 'assisted_bodyweight') &&
+    (set.weightKg ?? 0) <= 0
+  ) {
+    return `${set.reps ?? 0} reps (peso corporal)`;
+  }
+  return `${formatWeightWithUnit(set.weightKg ?? 0, unit)} × ${set.reps ?? 0} reps`;
+}
 
 /**
  * Calcula o 1RM Estimado usando a fórmula de Epley:
@@ -43,15 +203,26 @@ export function getRepMaxTable(oneRepMax: number): { reps: number; weight: numbe
 }
 
 /**
- * Retorna a última execução de um exercício no histórico de treinos
+ * Retorna a última execução cronológica de um exercício no histórico de treinos
  */
 export function getPreviousExerciseSets(
   exerciseId: string,
   history: WorkoutSession[],
-  excludeSessionId?: string | null
+  excludeSessionId?: string | null,
+  beforeTimestamp?: number | null
 ): WorkoutSet[] {
-  for (const session of history) {
+  const sorted = [...history].sort(
+    (a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
+  );
+  for (const session of sorted) {
     if (excludeSessionId && session.id === excludeSessionId) continue;
+    if (
+      beforeTimestamp !== null &&
+      beforeTimestamp !== undefined &&
+      new Date(session.startTime).getTime() >= beforeTimestamp
+    ) {
+      continue;
+    }
     const found = session.exercises.find((e) => e.exerciseId === exerciseId);
     if (found && found.sets.some((s) => s.completed)) {
       return found.sets.filter((s) => s.completed);
@@ -485,8 +656,17 @@ export function exportWorkoutsToCSV(
   const rows: string[] = [header];
   const escapeCsv = (val: string | number | null | undefined) => {
     if (val === null || val === undefined) return '';
-    const str = String(val);
-    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    let str = String(val);
+    // Mitigação de CSV Injection (Formula Injection) em strings de texto livre
+    if (typeof val === 'string' && /^[=+\-@\t\r]/.test(str)) {
+      str = `'${str}`;
+    }
+    if (
+      str.includes(',') ||
+      str.includes('"') ||
+      str.includes('\n') ||
+      str.includes('\r')
+    ) {
       return `"${str.replace(/"/g, '""')}"`;
     }
     return str;

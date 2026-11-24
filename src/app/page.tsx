@@ -52,6 +52,12 @@ export default function IronPulseAppPage() {
   };
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
@@ -227,7 +233,11 @@ export default function IronPulseAppPage() {
       </header>
 
       {/* Área Principal de Conteúdo */}
-      <main className={`flex-1 md:pl-64 ${isMinimized ? 'pb-40' : 'pb-20 md:pb-8'}`}>
+      <main
+        className={`flex-1 md:pl-64 ${
+          isMinimized ? 'pb-56 md:pb-24' : 'pb-24 md:pb-8'
+        }`}
+      >
         <div className="max-w-5xl mx-auto p-4 sm:p-6 md:p-8">
           {activeTab === 'workout' && <RoutinesView />}
           {activeTab === 'feed' && <SocialFeedView />}

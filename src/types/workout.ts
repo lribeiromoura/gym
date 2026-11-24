@@ -94,6 +94,7 @@ export interface WorkoutSession {
 
 export interface ActiveWorkoutState {
   editingSessionId?: string | null; // Se preenchido, está editando um treino já salvo
+  originalEndTime?: string | null; // Preserva endTime original ao editar um treino histórico
   title: string;
   routineId?: string | null;
   startTime: number;

@@ -30,6 +30,7 @@ export function resolveUserSettings(
   return {
     ...INITIAL_USER_SETTINGS,
     ...safe,
+    weightUnit: safe.weightUnit === 'lbs' ? 'lbs' : 'kg',
     defaultBarWeightKg: barWeight,
     barbellWeightKg: barWeight,
     theme: safe.theme === 'light' ? 'light' : 'dark',
@@ -123,6 +124,125 @@ export type ParseResult =
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
 
+const isValidWorkoutExercisesArray = (val: unknown): boolean =>
+  Array.isArray(val) &&
+  val.every(
+    (ex) =>
+      isObject(ex) &&
+      typeof ex.id === 'string' &&
+      typeof ex.exerciseId === 'string' &&
+      Array.isArray(ex.sets)
+  );
+
+function isValidCollectionItem(
+  key: (typeof COLLECTION_KEYS)[number],
+  item: unknown
+): boolean {
+  if (!isObject(item) || typeof item.id !== 'string' || !item.id.trim()) {
+    return false;
+  }
+  switch (key) {
+    case 'exercises':
+      return typeof item.title === 'string' && item.title.trim().length > 0;
+    case 'folders':
+      return typeof item.name === 'string' && item.name.trim().length > 0;
+    case 'routines':
+      return (
+        typeof item.title === 'string' &&
+        (item.exercises === undefined || isValidWorkoutExercisesArray(item.exercises))
+      );
+    case 'workoutHistory':
+      return (
+        typeof item.title === 'string' &&
+        typeof item.startTime === 'string' &&
+        !Number.isNaN(new Date(item.startTime).getTime()) &&
+        isValidWorkoutExercisesArray(item.exercises)
+      );
+    case 'measurements':
+      return typeof item.date === 'string' && item.date.trim().length > 0;
+    case 'progressPhotos':
+      return (
+        typeof item.date === 'string' && typeof item.dataUrl === 'string'
+      );
+    default:
+      return true;
+  }
+}
+
+/** Garante que dados restaurados tenham todos os arrays e campos numéricos íntegros */
+export function normalizeBackupData(data: BackupData): BackupData {
+  const safeExercises = (data.exercises || []).map((ex) => ({
+    ...ex,
+    secondaryMuscles: Array.isArray(ex.secondaryMuscles)
+      ? ex.secondaryMuscles
+      : [],
+    instructions: Array.isArray(ex.instructions) ? ex.instructions : [],
+  }));
+
+  const safeRoutines = (data.routines || []).map((r) => ({
+    ...r,
+    folderId: r.folderId ?? null,
+    description: typeof r.description === 'string' ? r.description : '',
+    updatedAt:
+      typeof r.updatedAt === 'string' ? r.updatedAt : new Date().toISOString(),
+    exercises: Array.isArray(r.exercises)
+      ? r.exercises.map((ex) => ({
+          ...ex,
+          supersetId: ex.supersetId ?? null,
+          restTimerSeconds:
+            typeof ex.restTimerSeconds === 'number' ? ex.restTimerSeconds : 90,
+          notes: typeof ex.notes === 'string' ? ex.notes : '',
+          sets: Array.isArray(ex.sets) ? ex.sets : [],
+        }))
+      : [],
+  }));
+
+  const safeHistory = (data.workoutHistory || []).map((w) => ({
+    ...w,
+    description: typeof w.description === 'string' ? w.description : '',
+    durationSeconds:
+      typeof w.durationSeconds === 'number' && Number.isFinite(w.durationSeconds)
+        ? Math.max(0, w.durationSeconds)
+        : 60,
+    totalVolumeKg:
+      typeof w.totalVolumeKg === 'number' && Number.isFinite(w.totalVolumeKg)
+        ? Math.max(0, w.totalVolumeKg)
+        : 0,
+    totalSets:
+      typeof w.totalSets === 'number' && Number.isFinite(w.totalSets)
+        ? Math.max(0, w.totalSets)
+        : 0,
+    prCount:
+      typeof w.prCount === 'number' && Number.isFinite(w.prCount)
+        ? Math.max(0, w.prCount)
+        : 0,
+    exercises: Array.isArray(w.exercises)
+      ? w.exercises.map((ex) => ({
+          ...ex,
+          supersetId: ex.supersetId ?? null,
+          restTimerSeconds:
+            typeof ex.restTimerSeconds === 'number' ? ex.restTimerSeconds : 90,
+          notes: typeof ex.notes === 'string' ? ex.notes : '',
+          sets: Array.isArray(ex.sets) ? ex.sets : [],
+        }))
+      : [],
+  }));
+
+  const safeMeasurements = [...(data.measurements || [])].sort((a, b) =>
+    a.date.localeCompare(b.date)
+  );
+
+  return {
+    exercises: safeExercises,
+    folders: data.folders || [],
+    routines: safeRoutines,
+    workoutHistory: safeHistory,
+    measurements: safeMeasurements,
+    progressPhotos: data.progressPhotos || [],
+    settings: data.settings || {},
+  };
+}
+
 /** Valida e normaliza o conteúdo de um arquivo de backup. */
 export function parseBackup(text: string): ParseResult {
   let raw: unknown;
@@ -159,7 +279,7 @@ export function parseBackup(text: string): ParseResult {
     if (!Array.isArray(value)) {
       return { ok: false, error: `Backup corrompido: "${key}" não é uma lista.` };
     }
-    if (!value.every((item) => isObject(item) && typeof item.id === 'string')) {
+    if (!value.every((item) => isValidCollectionItem(key, item))) {
       return { ok: false, error: `Backup corrompido: itens inválidos em "${key}".` };
     }
     (data[key] as unknown[]) = value;

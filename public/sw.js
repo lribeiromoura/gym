@@ -1,20 +1,72 @@
-const CACHE_NAME = 'ironpulse-pwa-v2';
+const CACHE_NAME = 'ironpulse-pwa-v3';
+const PRECACHE_URLS = [
+  '/',
+  '/manifest.json',
+  '/icon.svg',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+];
 
 // Timeout ativo no Service Worker para o cronômetro de descanso
 let restTimerTimeoutId = null;
 
-self.addEventListener('install', () => {
-  self.skipWaiting();
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.addAll(PRECACHE_URLS).catch(() => {}))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((key) => key !== CACHE_NAME)
+            .map((oldKey) => caches.delete(oldKey))
+        )
+      )
+      .then(() => self.clients.claim())
+  );
 });
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+
+  const url = new URL(event.request.url);
+  // Não intercepta APIs nem requisições de origens externas
+  if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) {
+    return;
+  }
+
   event.respondWith(
-    fetch(event.request).catch(() => caches.match(event.request))
+    fetch(event.request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.ok) {
+          const clone = networkResponse.clone();
+          caches
+            .open(CACHE_NAME)
+            .then((cache) => cache.put(event.request, clone))
+            .catch(() => {});
+        }
+        return networkResponse;
+      })
+      .catch(async () => {
+        const cached = await caches.match(event.request);
+        if (cached) return cached;
+        if (event.request.mode === 'navigate') {
+          const rootFallback = await caches.match('/');
+          if (rootFallback) return rootFallback;
+        }
+        return new Response('Offline', {
+          status: 503,
+          statusText: 'Service Unavailable',
+        });
+      })
   );
 });
 
@@ -35,7 +87,7 @@ self.addEventListener('message', (event) => {
     if (delayMs > 0) {
       restTimerTimeoutId = setTimeout(() => {
         restTimerTimeoutId = null;
-        self.registration.showNotification('Descanso Concluído! 🏋️', {
+        self.registration.showNotification('Descanso Concluído!', {
           body: `Hora da próxima série de ${exerciseTitle}!`,
           icon: '/icons/icon-192.png',
           badge: '/icons/icon-192.png',
@@ -69,7 +121,7 @@ self.addEventListener('push', (event) => {
   }
 
   let payload = {
-    title: 'Descanso Concluído! 🏋️',
+    title: 'Descanso Concluído!',
     body: 'Seu tempo de descanso acabou. Hora da próxima série!',
     url: '/',
   };

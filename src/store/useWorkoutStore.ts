@@ -26,8 +26,10 @@ import {
 } from '@/data/initial-data';
 import {
   buildAutoWarmupSets,
+  createDefaultSetValues,
   evaluateWorkoutPRs,
   getPreviousExerciseSets,
+  isSetFilled,
 } from '@/lib/calculations';
 import {
   cancelRestNotification,
@@ -37,11 +39,17 @@ import { SharePayload } from '@/lib/share';
 import {
   BackupData,
   mergeById,
+  normalizeBackupData,
   resolveUserSettings,
   RestoreMode,
 } from '@/lib/backup';
 
 const RESTORE_UNDO_KEY = 'ironpulse-restore-undo';
+
+export interface PendingWorkoutReplace {
+  targetTitle: string;
+  run: () => void;
+}
 
 interface RestTimerState {
   isActive: boolean;
@@ -53,10 +61,12 @@ interface RestTimerState {
 
 interface WorkoutStoreState {
   exercises: Exercise[];
+  deletedExerciseIds: string[];
   folders: RoutineFolder[];
   routines: Routine[];
   workoutHistory: WorkoutSession[];
   activeWorkout: ActiveWorkoutState | null;
+  pendingWorkoutReplace: PendingWorkoutReplace | null;
   restTimer: RestTimerState;
   lastFinishedWorkout: WorkoutSession | null;
   measurements: BodyMeasurementEntry[];
@@ -64,10 +74,16 @@ interface WorkoutStoreState {
   settings: UserSettings;
 
   // Actions — Active Workout & Editing Past Workouts
-  startEmptyWorkout: (title?: string) => void;
-  startRoutineWorkout: (routineId: string) => void;
-  startWorkoutFromExercises: (title: string, exercises: WorkoutExercise[]) => void;
-  startEditWorkoutSession: (sessionId: string) => void;
+  startEmptyWorkout: (title?: string, force?: boolean) => void;
+  startRoutineWorkout: (routineId: string, force?: boolean) => void;
+  startWorkoutFromExercises: (
+    title: string,
+    exercises: WorkoutExercise[],
+    force?: boolean
+  ) => void;
+  startEditWorkoutSession: (sessionId: string, force?: boolean) => void;
+  confirmPendingWorkoutReplace: () => void;
+  cancelPendingWorkoutReplace: () => void;
   toggleMinimizeWorkout: (minimized?: boolean) => void;
   updateActiveWorkoutMeta: (title: string, description: string) => void;
   addExerciseToActiveWorkout: (exerciseId: string) => void;
@@ -164,10 +180,12 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
   persist(
     (set, get) => ({
       exercises: INITIAL_EXERCISES,
+      deletedExerciseIds: [],
       folders: INITIAL_FOLDERS,
       routines: INITIAL_ROUTINES,
       workoutHistory: INITIAL_WORKOUT_HISTORY,
       activeWorkout: null,
+      pendingWorkoutReplace: null,
       restTimer: {
         isActive: false,
         totalSeconds: 90,
@@ -179,94 +197,166 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
       settings: INITIAL_USER_SETTINGS,
       lastBackupAt: null,
 
-      startEmptyWorkout: (title = 'Treino Livre') => {
-        set({
-          activeWorkout: {
-            editingSessionId: null,
-            title,
-            routineId: null,
-            startTime: Date.now(),
-            description: '',
-            exercises: [],
-            isMinimized: false,
-          },
-        });
+      confirmPendingWorkoutReplace: () => {
+        const pending = get().pendingWorkoutReplace;
+        set({ pendingWorkoutReplace: null });
+        if (pending) {
+          cancelRestNotification();
+          set({
+            restTimer: {
+              isActive: false,
+              totalSeconds: 90,
+              remainingSeconds: 0,
+              endTime: null,
+            },
+          });
+          pending.run();
+        }
       },
 
-      startRoutineWorkout: (routineId) => {
+      cancelPendingWorkoutReplace: () => {
+        set({ pendingWorkoutReplace: null });
+      },
+
+      startEmptyWorkout: (title = 'Treino Livre', force = false) => {
+        const launch = () => {
+          set({
+            pendingWorkoutReplace: null,
+            activeWorkout: {
+              editingSessionId: null,
+              originalEndTime: null,
+              title,
+              routineId: null,
+              startTime: Date.now(),
+              description: '',
+              exercises: [],
+              isMinimized: false,
+            },
+          });
+        };
+        if (!force && get().activeWorkout) {
+          set({ pendingWorkoutReplace: { targetTitle: title, run: launch } });
+          return;
+        }
+        launch();
+      },
+
+      startRoutineWorkout: (routineId, force = false) => {
         const routine = get().routines.find((r) => r.id === routineId);
         if (!routine) return;
-        const clonedExercises: WorkoutExercise[] = routine.exercises.map((ex) => ({
-          ...ex,
-          id: uid('we'),
-          sets: ex.sets.map((s) => ({
-            ...s,
-            id: uid('ws'),
-            completed: false,
-            prs: [],
-          })),
-        }));
+        const launch = () => {
+          const latestRoutine =
+            get().routines.find((r) => r.id === routineId) || routine;
+          const clonedExercises: WorkoutExercise[] = latestRoutine.exercises.map(
+            (ex) => ({
+              ...ex,
+              id: uid('we'),
+              sets: ex.sets.map((s) => ({
+                ...s,
+                id: uid('ws'),
+                completed: false,
+                prs: [],
+              })),
+            })
+          );
 
-        set({
-          activeWorkout: {
-            editingSessionId: null,
-            title: routine.title,
-            routineId: routine.id,
-            startTime: Date.now(),
-            description: '',
-            exercises: clonedExercises,
-            isMinimized: false,
-          },
-        });
+          set({
+            pendingWorkoutReplace: null,
+            activeWorkout: {
+              editingSessionId: null,
+              originalEndTime: null,
+              title: latestRoutine.title,
+              routineId: latestRoutine.id,
+              startTime: Date.now(),
+              description: latestRoutine.description || '',
+              exercises: clonedExercises,
+              isMinimized: false,
+            },
+          });
+        };
+        if (!force && get().activeWorkout) {
+          set({
+            pendingWorkoutReplace: { targetTitle: routine.title, run: launch },
+          });
+          return;
+        }
+        launch();
       },
 
-      startWorkoutFromExercises: (title, exercises) => {
-        const cloned: WorkoutExercise[] = exercises.map((ex) => ({
-          ...ex,
-          id: uid('we'),
-          sets: ex.sets.map((s) => ({
-            ...s,
-            id: uid('ws'),
-            completed: false,
-            prs: [],
-          })),
-        }));
-        set({
-          activeWorkout: {
-            editingSessionId: null,
-            title,
-            routineId: null,
-            startTime: Date.now(),
-            description: '',
-            exercises: cloned,
-            isMinimized: false,
-          },
-        });
+      startWorkoutFromExercises: (title, exercises, force = false) => {
+        const launch = () => {
+          const cloned: WorkoutExercise[] = exercises.map((ex) => ({
+            ...ex,
+            id: uid('we'),
+            sets: ex.sets.map((s) => ({
+              ...s,
+              id: uid('ws'),
+              completed: false,
+              prs: [],
+            })),
+          }));
+          set({
+            pendingWorkoutReplace: null,
+            activeWorkout: {
+              editingSessionId: null,
+              originalEndTime: null,
+              title,
+              routineId: null,
+              startTime: Date.now(),
+              description: '',
+              exercises: cloned,
+              isMinimized: false,
+            },
+          });
+        };
+        if (!force && get().activeWorkout) {
+          set({ pendingWorkoutReplace: { targetTitle: title, run: launch } });
+          return;
+        }
+        launch();
       },
 
-      startEditWorkoutSession: (sessionId) => {
+      startEditWorkoutSession: (sessionId, force = false) => {
         const session = get().workoutHistory.find((w) => w.id === sessionId);
         if (!session) return;
-        const clonedExercises: WorkoutExercise[] = session.exercises.map((ex) => ({
-          ...ex,
-          sets: ex.sets.map((s) => ({
-            ...s,
-            completed: true,
-          })),
-        }));
+        const launch = () => {
+          const latestSession =
+            get().workoutHistory.find((w) => w.id === sessionId) || session;
+          const clonedExercises: WorkoutExercise[] = latestSession.exercises.map(
+            (ex) => ({
+              ...ex,
+              sets: ex.sets.map((s) => ({
+                ...s,
+                completed: true,
+              })),
+            })
+          );
 
-        set({
-          activeWorkout: {
-            editingSessionId: session.id,
-            title: session.title,
-            routineId: session.routineId ?? null,
-            startTime: new Date(session.startTime).getTime(),
-            durationSecondsOverride: session.durationSeconds,
-            description: session.description,
-            exercises: clonedExercises,
-            isMinimized: false,
-          },
-        });
+          set({
+            pendingWorkoutReplace: null,
+            activeWorkout: {
+              editingSessionId: latestSession.id,
+              originalEndTime: latestSession.endTime,
+              title: latestSession.title,
+              routineId: latestSession.routineId ?? null,
+              startTime: new Date(latestSession.startTime).getTime(),
+              durationSecondsOverride: latestSession.durationSeconds,
+              description: latestSession.description,
+              exercises: clonedExercises,
+              isMinimized: false,
+            },
+          });
+        };
+        if (!force && get().activeWorkout) {
+          set({
+            pendingWorkoutReplace: {
+              targetTitle: `Editar: ${session.title}`,
+              run: launch,
+            },
+          });
+          return;
+        }
+        launch();
       },
 
       toggleMinimizeWorkout: (minimized) => {
@@ -294,42 +384,44 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
       },
 
       addExerciseToActiveWorkout: (exerciseId) => {
-        const current = get().activeWorkout;
+        const state = get();
+        const current = state.activeWorkout;
         if (!current) return;
+        const meta = state.exercises.find((e) => e.id === exerciseId);
         const prevSets = getPreviousExerciseSets(
           exerciseId,
-          get().workoutHistory,
-          current.editingSessionId
+          state.workoutHistory,
+          current.editingSessionId,
+          current.editingSessionId ? current.startTime : null
         );
-        const defaultSetWeight = prevSets[0]?.weightKg ?? 20;
-        const defaultSetReps = prevSets[0]?.reps ?? 10;
+        const defaults = createDefaultSetValues(
+          meta?.measurementType,
+          prevSets[0]
+        );
 
         const newExercise: WorkoutExercise = {
           id: uid('we'),
           exerciseId,
           supersetId: null,
-          restTimerSeconds: get().settings.defaultRestSeconds,
+          restTimerSeconds: state.settings.defaultRestSeconds,
           notes: '',
           sets: [
             {
               id: uid('ws'),
               type: 'normal',
-              weightKg: defaultSetWeight,
-              reps: defaultSetReps,
+              ...defaults,
               completed: !!current.editingSessionId,
             },
             {
               id: uid('ws'),
               type: 'normal',
-              weightKg: defaultSetWeight,
-              reps: defaultSetReps,
+              ...defaults,
               completed: !!current.editingSessionId,
             },
             {
               id: uid('ws'),
               type: 'normal',
-              weightKg: defaultSetWeight,
-              reps: defaultSetReps,
+              ...defaults,
               completed: !!current.editingSessionId,
             },
           ],
@@ -405,21 +497,24 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
       },
 
       addSetToActiveExercise: (workoutExerciseId) => {
-        const current = get().activeWorkout;
+        const state = get();
+        const current = state.activeWorkout;
         if (!current) return;
         set({
           activeWorkout: {
             ...current,
             exercises: current.exercises.map((ex) => {
               if (ex.id !== workoutExerciseId) return ex;
+              const meta = state.exercises.find((e) => e.id === ex.exerciseId);
               const lastSet = ex.sets[ex.sets.length - 1];
+              const defaults = createDefaultSetValues(
+                meta?.measurementType,
+                lastSet
+              );
               const newSet: WorkoutSet = {
                 id: uid('ws'),
                 type: 'normal',
-                weightKg: lastSet ? lastSet.weightKg : 20,
-                reps: lastSet ? lastSet.reps : 10,
-                distanceKm: lastSet?.distanceKm ?? null,
-                durationSeconds: lastSet?.durationSeconds ?? null,
+                ...defaults,
                 completed: !!current.editingSessionId,
               };
               return { ...ex, sets: [...ex.sets, newSet] };
@@ -564,26 +659,39 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
         if (!current) return null;
 
         const isEditing = !!current.editingSessionId;
+        const catalogById = new Map(state.exercises.map((e) => [e.id, e]));
+
+        // Ao editar um treino histórico, compara PRs apenas contra sessões anteriores à data daquele treino
         const otherHistory = isEditing
-          ? state.workoutHistory.filter((w) => w.id !== current.editingSessionId)
+          ? state.workoutHistory.filter(
+              (w) =>
+                w.id !== current.editingSessionId &&
+                new Date(w.startTime).getTime() < current.startTime
+            )
           : state.workoutHistory;
 
-        const isFilledSet = (s: WorkoutSet) =>
-          ((s.weightKg ?? 0) > 0 && (s.reps ?? 0) > 0) ||
-          (s.durationSeconds ?? 0) > 0;
-
         const completedExercises = current.exercises
-          .map((ex) => ({
-            ...ex,
-            sets: ex.sets
-              .map((s) =>
-                markAllFilledSets && !s.completed && isFilledSet(s)
-                  ? { ...s, completed: true }
-                  : s
-              )
-              .filter((s) => s.completed),
-          }))
+          .map((ex) => {
+            const meta = catalogById.get(ex.exerciseId);
+            return {
+              ...ex,
+              sets: ex.sets
+                .map((s) =>
+                  markAllFilledSets &&
+                  !s.completed &&
+                  isSetFilled(s, meta?.measurementType)
+                    ? { ...s, completed: true }
+                    : s
+                )
+                .filter((s) => s.completed),
+            };
+          })
           .filter((ex) => ex.sets.length > 0);
+
+        // Bloqueia salvar treino completamente vazio (0 séries concluídas)
+        if (completedExercises.length === 0) {
+          return null;
+        }
 
         const { annotatedExercises, totalPRs } = evaluateWorkoutPRs(
           completedExercises,
@@ -593,9 +701,13 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
         let totalVolumeKg = 0;
         let totalSets = 0;
         for (const ex of annotatedExercises) {
+          const meta = catalogById.get(ex.exerciseId);
+          const countsVolume =
+            meta?.measurementType !== 'duration' &&
+            meta?.measurementType !== 'distance_duration';
           for (const s of ex.sets) {
             totalSets += 1;
-            if (s.type !== 'warmup') {
+            if (countsVolume && s.type !== 'warmup') {
               totalVolumeKg += (s.weightKg ?? 0) * (s.reps ?? 0);
             }
           }
@@ -605,12 +717,17 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
           current.durationSecondsOverride ??
           Math.max(60, Math.floor((Date.now() - current.startTime) / 1000));
 
+        const endTimeIso = isEditing
+          ? current.originalEndTime ||
+            new Date(current.startTime + durationSeconds * 1000).toISOString()
+          : new Date().toISOString();
+
         const savedSession: WorkoutSession = {
           id: current.editingSessionId || uid('wh'),
-          title: current.title || 'Treino Concluído',
+          title: current.title.trim() || 'Treino Concluído',
           routineId: current.routineId,
           startTime: new Date(current.startTime).toISOString(),
-          endTime: new Date().toISOString(),
+          endTime: endTimeIso,
           durationSeconds,
           description: current.description,
           exercises: annotatedExercises,
@@ -821,6 +938,16 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
           id: uid('routine'),
           title: `${found.title} (Cópia)`,
           updatedAt: new Date().toISOString(),
+          exercises: found.exercises.map((ex) => ({
+            ...ex,
+            id: uid('re'),
+            sets: ex.sets.map((s) => ({
+              ...s,
+              id: uid('s'),
+              completed: false,
+              prs: [],
+            })),
+          })),
         };
         set({ routines: [copy, ...get().routines] });
       },
@@ -968,8 +1095,12 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
       },
 
       deleteExercise: (exerciseId) => {
+        const deleted = get().deletedExerciseIds;
         set({
           exercises: get().exercises.filter((e) => e.id !== exerciseId),
+          deletedExerciseIds: deleted.includes(exerciseId)
+            ? deleted
+            : [...deleted, exerciseId],
         });
       },
 
@@ -1039,10 +1170,12 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
       clearAllData: () => {
         set({
           exercises: INITIAL_EXERCISES,
+          deletedExerciseIds: [],
           folders: [],
           routines: [],
           workoutHistory: [],
           activeWorkout: null,
+          pendingWorkoutReplace: null,
           measurements: [],
           progressPhotos: [],
           settings: INITIAL_USER_SETTINGS,
@@ -1053,10 +1186,12 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
         set({ lastBackupAt: new Date().toISOString() });
       },
 
-      restoreBackup: (data, mode) => {
+      restoreBackup: (rawData, mode) => {
+        const data = normalizeBackupData(rawData);
         const s = get();
         const snapshot = {
           exercises: s.exercises,
+          deletedExerciseIds: s.deletedExerciseIds,
           folders: s.folders,
           routines: s.routines,
           workoutHistory: s.workoutHistory,
@@ -1075,13 +1210,19 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
                 ...INITIAL_EXERCISES,
                 ...data.exercises.filter((e) => !seedIds.has(e.id)),
               ],
+              deletedExerciseIds: [],
               folders: data.folders,
               routines: data.routines,
-              workoutHistory: data.workoutHistory,
+              workoutHistory: [...data.workoutHistory].sort(
+                (a, b) =>
+                  new Date(b.startTime).getTime() -
+                  new Date(a.startTime).getTime()
+              ),
               measurements: data.measurements,
               progressPhotos: data.progressPhotos,
               settings: resolveUserSettings(data.settings),
               activeWorkout: null,
+              pendingWorkoutReplace: null,
               lastFinishedWorkout: null,
             });
           } else {
@@ -1092,7 +1233,9 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
               workoutHistory: mergeById(s.workoutHistory, data.workoutHistory).sort(
                 (a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
               ),
-              measurements: mergeById(s.measurements, data.measurements),
+              measurements: mergeById(s.measurements, data.measurements).sort(
+                (a, b) => a.date.localeCompare(b.date)
+              ),
               progressPhotos: mergeById(s.progressPhotos, data.progressPhotos),
               settings: resolveUserSettings({ ...data.settings, ...s.settings }),
             });
@@ -1110,8 +1253,12 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
           const snapshot = JSON.parse(raw);
           set({
             ...snapshot,
+            deletedExerciseIds: Array.isArray(snapshot?.deletedExerciseIds)
+              ? snapshot.deletedExerciseIds
+              : [],
             settings: resolveUserSettings(snapshot?.settings),
             activeWorkout: null,
+            pendingWorkoutReplace: null,
           });
           localStorage.removeItem(RESTORE_UNDO_KEY);
           return true;
@@ -1126,27 +1273,44 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
     }),
     {
       name: 'ironpulse-storage-v3',
+      partialize: (state) => ({
+        exercises: state.exercises,
+        deletedExerciseIds: state.deletedExerciseIds,
+        folders: state.folders,
+        routines: state.routines,
+        workoutHistory: state.workoutHistory,
+        activeWorkout: state.activeWorkout,
+        restTimer: state.restTimer,
+        lastFinishedWorkout: state.lastFinishedWorkout,
+        measurements: state.measurements,
+        progressPhotos: state.progressPhotos,
+        settings: state.settings,
+        lastBackupAt: state.lastBackupAt,
+      }),
       merge: (persistedState, currentState) => {
         const persisted = (persistedState as Partial<WorkoutStoreState>) || {};
         const persistedExercises = persisted.exercises || [];
+        const deletedIds = new Set(persisted.deletedExerciseIds || []);
         const existingMap = new Map(persistedExercises.map((e) => [e.id, e]));
 
-        // Atualiza os exercícios existentes com novos metadados (gifUrl, englishTitle) e adiciona novos do seed
-        const mergedExercises = persistedExercises.map((ex) => {
-          const seedMatch = INITIAL_EXERCISES.find((s) => s.id === ex.id);
-          if (seedMatch) {
-            return {
-              ...seedMatch,
-              ...ex,
-              gifUrl: ex.gifUrl || seedMatch.gifUrl,
-              englishTitle: ex.englishTitle || seedMatch.englishTitle,
-            };
-          }
-          return ex;
-        });
+        // Atualiza os exercícios existentes com novos metadados (gifUrl, englishTitle) e adiciona novos do seed que não foram excluídos
+        const mergedExercises = persistedExercises
+          .filter((ex) => !deletedIds.has(ex.id))
+          .map((ex) => {
+            const seedMatch = INITIAL_EXERCISES.find((s) => s.id === ex.id);
+            if (seedMatch) {
+              return {
+                ...seedMatch,
+                ...ex,
+                gifUrl: ex.gifUrl || seedMatch.gifUrl,
+                englishTitle: ex.englishTitle || seedMatch.englishTitle,
+              };
+            }
+            return ex;
+          });
 
         for (const seedEx of INITIAL_EXERCISES) {
-          if (!existingMap.has(seedEx.id)) {
+          if (!existingMap.has(seedEx.id) && !deletedIds.has(seedEx.id)) {
             mergedExercises.push(seedEx);
           }
         }
@@ -1154,9 +1318,13 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
         return {
           ...currentState,
           ...persisted,
+          pendingWorkoutReplace: null,
+          deletedExerciseIds: Array.from(deletedIds),
           settings: resolveUserSettings(persisted.settings),
           exercises:
-            mergedExercises.length > 0 ? mergedExercises : INITIAL_EXERCISES,
+            mergedExercises.length > 0 || deletedIds.size > 0
+              ? mergedExercises
+              : INITIAL_EXERCISES,
         };
       },
     }

@@ -4,6 +4,7 @@ import {
   BackupSourceState,
   createBackup,
   mergeById,
+  normalizeBackupData,
   parseBackup,
   resolveUserSettings,
   serializeBackup,
@@ -124,5 +125,37 @@ describe('backup', () => {
     expect(customLight.theme).toBe('light');
     expect(customLight.showRpeColumn).toBe(true);
     expect(customLight.defaultBarWeightKg).toBe(15);
+  });
+
+  it('rejeita coleções de histórico/rotinas corrompidas e normaliza campos ausentes (BUG-12)', () => {
+    // workoutHistory sem startTime/exercises deve ser rejeitado
+    expect(
+      parseBackup(
+        '{"app":"ironpulse","schemaVersion":1,"data":{"workoutHistory":[{"id":"1"}]}}'
+      ).ok
+    ).toBe(false);
+
+    // routines com exercises não-array deve ser rejeitado
+    expect(
+      parseBackup(
+        '{"app":"ironpulse","schemaVersion":1,"data":{"routines":[{"id":"r1","title":"A","exercises":"bad"}]}}'
+      ).ok
+    ).toBe(false);
+
+    // normalizeBackupData garante arrays válidos e ordena medidas cronologicamente
+    const normalized = normalizeBackupData({
+      exercises: [],
+      folders: [],
+      routines: [{ id: 'r1', title: 'Legado' } as unknown as Routine],
+      workoutHistory: [],
+      measurements: [
+        { id: 'm2', date: '2026-11-20', weightKg: 80 },
+        { id: 'm1', date: '2026-11-10', weightKg: 82 },
+      ],
+      progressPhotos: [],
+      settings: {},
+    });
+    expect(normalized.routines[0].exercises).toEqual([]);
+    expect(normalized.measurements.map((m) => m.id)).toEqual(['m1', 'm2']);
   });
 });

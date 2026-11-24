@@ -24,7 +24,7 @@ import {
   MuscleGroup,
 } from '@/types/workout';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
-import { getExerciseRecords } from '@/lib/calculations';
+import { calculate1RM, formatWeightWithUnit } from '@/lib/calculations';
 import {
   fetchExerciseDBCatalog,
   searchExerciseDBWithStatus,
@@ -38,11 +38,32 @@ export function ExercisesView() {
   const exercises = useWorkoutStore((s) => s.exercises);
   const workoutHistory = useWorkoutStore((s) => s.workoutHistory);
   const activeWorkout = useWorkoutStore((s) => s.activeWorkout);
+  const settings = useWorkoutStore((s) => s.settings);
   const addExerciseToActiveWorkout = useWorkoutStore(
     (s) => s.addExerciseToActiveWorkout
   );
   const addCustomExercise = useWorkoutStore((s) => s.addCustomExercise);
   const importExercisesBatch = useWorkoutStore((s) => s.importExercisesBatch);
+  const weightUnit = settings?.weightUnit === 'lbs' ? 'lbs' : 'kg';
+
+  // Memoiza o melhor 1RM de cada exercício em uma única passagem pelo histórico (O(H*S))
+  const best1RMByExerciseId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const session of workoutHistory) {
+      for (const ex of session.exercises) {
+        for (const s of ex.sets) {
+          if (!s.completed || s.type === 'warmup') continue;
+          const est = calculate1RM(s.weightKg, s.reps);
+          if (est > (map.get(ex.exerciseId) ?? 0)) {
+            map.set(ex.exerciseId, est);
+          }
+        }
+      }
+    }
+    return map;
+  }, [workoutHistory]);
+
+  const [failedGifIds, setFailedGifIds] = useState<Record<string, boolean>>({});
 
   const [search, setSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState<MuscleGroup | 'all'>(
@@ -239,7 +260,7 @@ export function ExercisesView() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar exercício em português ou inglês (busca também na ExerciseDB)..."
+            placeholder="Buscar exercício (PT ou EN)..."
             className="w-full h-11 pl-10 pr-16 rounded-xl bg-[#F1F5F9] text-base text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0084FF]"
           />
           <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
@@ -337,7 +358,7 @@ export function ExercisesView() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
           {filteredExercises.map((ex) => {
-            const rec = getExerciseRecords(ex.id, workoutHistory);
+            const best1RM = best1RMByExerciseId.get(ex.id);
             return (
               <div
                 key={ex.id}
@@ -346,13 +367,19 @@ export function ExercisesView() {
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className="w-12 h-12 rounded-full bg-[#F1F5F9] border border-slate-200 flex items-center justify-center text-[#0084FF] shrink-0 overflow-hidden">
-                    {ex.gifUrl ? (
+                    {ex.gifUrl && !failedGifIds[ex.id] ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={ex.gifUrl}
                         alt={ex.title}
                         loading="lazy"
-                        className="w-full h-full object-cover bg-white"
+                        onError={() =>
+                          setFailedGifIds((prev) => ({
+                            ...prev,
+                            [ex.id]: true,
+                          }))
+                        }
+                        className="w-full h-full object-cover"
                       />
                     ) : (
                       <Dumbbell className="w-5 h-5" />
@@ -362,20 +389,18 @@ export function ExercisesView() {
                     <h3 className="font-bold text-slate-900 text-[15px] leading-snug line-clamp-2 group-hover:text-[#0084FF] transition">
                       {ex.title}
                     </h3>
-                    <div className="flex flex-wrap items-center gap-1.5 mt-0.5 text-xs text-slate-500">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-xs text-slate-500">
                       <span className="text-[#0084FF] font-medium">
                         {MUSCLE_LABELS[ex.primaryMuscle]}
                       </span>
-                      <span>•</span>
-                      <span>{EQUIPMENT_LABELS[ex.equipment]}</span>
-                      {rec.best1RM && (
-                        <>
-                          <span>•</span>
-                          <span className="inline-flex items-center gap-1 text-amber-600 font-semibold">
-                            <Trophy className="w-3 h-3" /> 1RM:{' '}
-                            {rec.best1RM.value}kg
-                          </span>
-                        </>
+                      <span className="text-slate-400">
+                        {EQUIPMENT_LABELS[ex.equipment]}
+                      </span>
+                      {best1RM && best1RM > 0 && (
+                        <span className="inline-flex items-center gap-1 text-amber-600 font-semibold">
+                          <Trophy className="w-3 h-3 shrink-0" /> 1RM:{' '}
+                          {formatWeightWithUnit(best1RM, weightUnit)}
+                        </span>
                       )}
                     </div>
                   </div>

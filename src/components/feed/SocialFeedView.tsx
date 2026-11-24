@@ -16,13 +16,19 @@ import {
 } from 'lucide-react';
 import { MUSCLE_LABELS } from '@/types/workout';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
-import { calculate1RM, formatDuration } from '@/lib/calculations';
+import {
+  calculate1RM,
+  convertVolumeFromKg,
+  formatDuration,
+  formatSetSummary,
+  formatWeightWithUnit,
+  getWeightUnitLabel,
+} from '@/lib/calculations';
 import {
   buildShareUrl,
   encodeRoutineShareToken,
   shareOrCopyLink,
 } from '@/lib/share';
-import { formatPtBrNumber } from '@/components/ui/NumericInputs';
 
 export function SocialFeedView() {
   const workoutHistory = useWorkoutStore((s) => s.workoutHistory);
@@ -50,6 +56,8 @@ export function SocialFeedView() {
     () => new Map(exercises.map((e) => [e.id, e])),
     [exercises]
   );
+  const weightUnit = settings?.weightUnit === 'lbs' ? 'lbs' : 'kg';
+  const unitLabel = getWeightUnitLabel(weightUnit);
 
   const toggleExpand = (id: string) => {
     setExpandedSessionIds((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -233,7 +241,11 @@ export function SocialFeedView() {
                       <Dumbbell className="w-3 h-3 text-[#0084FF]" /> Volume
                     </span>
                     <p className="text-sm font-extrabold text-slate-900 mt-0.5">
-                      {w.totalVolumeKg.toLocaleString('pt-BR')} kg
+                      {convertVolumeFromKg(
+                        w.totalVolumeKg,
+                        weightUnit
+                      ).toLocaleString('pt-BR')}{' '}
+                      {unitLabel}
                     </p>
                   </div>
                   <div>
@@ -274,9 +286,27 @@ export function SocialFeedView() {
                 <div className="space-y-2 border-t border-slate-100 pt-3">
                   {w.exercises.map((ex) => {
                     const meta = exerciseMap.get(ex.exerciseId);
+                    const isTimeOrDistance =
+                      meta?.measurementType === 'duration' ||
+                      meta?.measurementType === 'distance_duration';
                     const bestSet = ex.sets.reduce((best, cur) => {
+                      if (!best) return cur;
+                      if (meta?.measurementType === 'duration') {
+                        return (cur.durationSeconds ?? 0) >
+                          (best.durationSeconds ?? 0)
+                          ? cur
+                          : best;
+                      }
+                      if (meta?.measurementType === 'distance_duration') {
+                        return (cur.distanceKm ?? 0) > (best.distanceKm ?? 0)
+                          ? cur
+                          : best;
+                      }
                       const cur1RM = calculate1RM(cur.weightKg, cur.reps);
-                      const best1RM = calculate1RM(best?.weightKg, best?.reps);
+                      const best1RM = calculate1RM(best.weightKg, best.reps);
+                      if (cur1RM === best1RM) {
+                        return (cur.reps ?? 0) > (best.reps ?? 0) ? cur : best;
+                      }
                       return cur1RM > best1RM ? cur : best;
                     }, ex.sets[0]);
                     const hasPR = ex.sets.some(
@@ -288,53 +318,69 @@ export function SocialFeedView() {
                         key={ex.id}
                         className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 space-y-2"
                       >
-                        <div className="flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-2 font-bold text-slate-900">
-                            <span className="text-[#0084FF]">
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <div className="flex items-center gap-2 font-bold text-slate-900 min-w-0">
+                            <span className="text-[#0084FF] shrink-0">
                               {ex.sets.length} séries
                             </span>
                             <span>•</span>
-                            <span>{meta?.title || 'Exercício'}</span>
+                            <span className="truncate">
+                              {meta?.title || 'Exercício'}
+                            </span>
                             {hasPR && (
-                              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300 text-[10px] font-extrabold flex items-center gap-1">
+                              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300 text-[10px] font-extrabold flex items-center gap-1 shrink-0">
                                 <Award className="w-3 h-3" /> PR
                               </span>
                             )}
                           </div>
                           {bestSet && (
-                            <span className="text-slate-600 font-semibold">
-                              Melhor: {formatPtBrNumber(bestSet.weightKg ?? 0)}kg ×{' '}
-                              {bestSet.reps ?? 0}
+                            <span className="text-slate-600 font-semibold shrink-0">
+                              Melhor:{' '}
+                              {formatSetSummary(
+                                bestSet,
+                                meta?.measurementType,
+                                weightUnit
+                              )}
                             </span>
                           )}
                         </div>
 
                         {isExpanded && (
                           <div className="space-y-1 pt-2 border-t border-slate-200">
-                            {ex.sets.map((s, sIdx) => (
-                              <div
-                                key={s.id}
-                                className="flex items-center justify-between text-[11px] text-slate-700 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200/60"
-                              >
-                                <span>
-                                  Série{' '}
-                                  {s.type === 'warmup'
-                                    ? 'W'
-                                    : s.type === 'dropset'
-                                    ? 'D'
-                                    : s.type === 'failure'
-                                    ? 'F'
-                                    : sIdx + 1}
-                                  :{' '}
-                                  <strong>
-                                    {formatPtBrNumber(s.weightKg ?? 0)}kg × {s.reps ?? 0} reps
-                                  </strong>
-                                </span>
-                                <span className="text-slate-500">
-                                  1RM: {calculate1RM(s.weightKg, s.reps)}kg
-                                </span>
-                              </div>
-                            ))}
+                            {ex.sets.map((s, sIdx) => {
+                              const est1rm = calculate1RM(s.weightKg, s.reps);
+                              return (
+                                <div
+                                  key={s.id}
+                                  className="flex items-center justify-between text-[11px] text-slate-700 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200/60"
+                                >
+                                  <span>
+                                    Série{' '}
+                                    {s.type === 'warmup'
+                                      ? 'W'
+                                      : s.type === 'dropset'
+                                      ? 'D'
+                                      : s.type === 'failure'
+                                      ? 'F'
+                                      : sIdx + 1}
+                                    :{' '}
+                                    <strong>
+                                      {formatSetSummary(
+                                        s,
+                                        meta?.measurementType,
+                                        weightUnit
+                                      )}
+                                    </strong>
+                                  </span>
+                                  {!isTimeOrDistance && est1rm > 0 && (
+                                    <span className="text-slate-500">
+                                      1RM:{' '}
+                                      {formatWeightWithUnit(est1rm, weightUnit)}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
                       </div>

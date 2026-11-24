@@ -33,7 +33,12 @@ import {
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import {
   calculateWeeklyStreakStats,
+  convertWeightFromKg,
+  convertWeightToKg,
+  createDefaultSetValues,
+  formatSetSummary,
   getRoutineLastTrainedInfo,
+  getWeightUnitLabel,
 } from '@/lib/calculations';
 import {
   buildShareUrl,
@@ -44,7 +49,6 @@ import {
 import { searchExerciseDB } from '@/lib/exercisedb';
 import {
   DecimalInput,
-  formatPtBrNumber,
   IntegerInput,
 } from '@/components/ui/NumericInputs';
 
@@ -139,6 +143,8 @@ export function RoutinesView() {
     () => new Map(exercises.map((e) => [e.id, e])),
     [exercises]
   );
+  const weightUnit = settings?.weightUnit === 'lbs' ? 'lbs' : 'kg';
+  const unitLabel = getWeightUnitLabel(weightUnit);
 
   const openNewRoutineEditor = (
     folderId: string | null = folders[0]?.id ?? null
@@ -176,16 +182,18 @@ export function RoutinesView() {
 
   const addExerciseToDraft = (exerciseId: string) => {
     if (!editingRoutine) return;
+    const meta = exerciseMap.get(exerciseId);
+    const defaults = createDefaultSetValues(meta?.measurementType);
     const nextEx: WorkoutExercise = {
       id: uid('re'),
       exerciseId,
       supersetId: null,
-      restTimerSeconds: 90,
+      restTimerSeconds: settings.defaultRestSeconds || 90,
       notes: '',
       sets: [
-        { id: uid('s'), type: 'normal', weightKg: 20, reps: 10, completed: false },
-        { id: uid('s'), type: 'normal', weightKg: 20, reps: 10, completed: false },
-        { id: uid('s'), type: 'normal', weightKg: 20, reps: 10, completed: false },
+        { id: uid('s'), type: 'normal', ...defaults, completed: false },
+        { id: uid('s'), type: 'normal', ...defaults, completed: false },
+        { id: uid('s'), type: 'normal', ...defaults, completed: false },
       ],
     };
     setEditingRoutine({
@@ -278,7 +286,7 @@ export function RoutinesView() {
             <div className="flex flex-wrap items-center gap-1.5 text-xs">
               {isSuggested && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-[#3B82F6] font-extrabold text-[11px]">
-                  <Sparkles className="w-3 h-3" /> ✨ Próximo sugerido
+                  <Sparkles className="w-3 h-3" /> Próximo sugerido
                 </span>
               )}
               {lastInfo && (
@@ -354,9 +362,13 @@ export function RoutinesView() {
                         )}
                       </div>
                       <span className="text-slate-400 text-[13px] shrink-0">
-                        {ex.sets[0]?.weightKg
-                          ? `${formatPtBrNumber(ex.sets[0].weightKg)}kg × ${ex.sets[0].reps}`
-                          : `${ex.sets[0]?.reps || 10} reps`}
+                        {ex.sets[0]
+                          ? formatSetSummary(
+                              ex.sets[0],
+                              meta?.measurementType,
+                              weightUnit
+                            )
+                          : '—'}
                       </span>
                     </div>
                   );
@@ -423,7 +435,7 @@ export function RoutinesView() {
           <div className="flex items-center gap-2">
             <Flame className="w-4 h-4 text-amber-500 shrink-0" />
             <span className="text-xs sm:text-sm font-extrabold text-slate-900">
-              🔥 Meta Semanal: {weeklyStats.workoutsThisWeek} de{' '}
+              Meta Semanal: {weeklyStats.workoutsThisWeek} de{' '}
               {weeklyStats.weeklyGoal} treinos
             </span>
           </div>
@@ -493,12 +505,12 @@ export function RoutinesView() {
       </div>
 
       {/* Barra Compacta de Treino Livre (Em Branco) */}
-      <div className="bg-white border border-slate-200 rounded-2xl px-4 py-3 flex items-center justify-between gap-3 shadow-xs">
+      <div className="bg-white border border-slate-200 rounded-2xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
         <div className="min-w-0">
-          <h2 className="text-sm font-extrabold text-slate-900 truncate">
-            ⚡ Iniciar Treino Livre (Em Branco)
+          <h2 className="text-sm font-extrabold text-slate-900 leading-snug">
+            Iniciar Treino Livre (Em Branco)
           </h2>
-          <p className="text-xs text-slate-500 truncate">
+          <p className="text-xs text-slate-500 leading-relaxed">
             Adicione exercícios na hora, com descanso e recordes automáticos
           </p>
         </div>
@@ -819,13 +831,31 @@ export function RoutinesView() {
                             <select
                               value={s.type}
                               onChange={(e) => {
-                                const updated = [...editingRoutine.exercises];
-                                updated[exIdx].sets[sIdx].type = e.target
-                                  .value as SetType;
-                                setEditingRoutine({
-                                  ...editingRoutine,
-                                  exercises: updated,
-                                });
+                                const nextType = e.target.value as SetType;
+                                setEditingRoutine((prev) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        exercises: prev.exercises.map(
+                                          (item, i) =>
+                                            i === exIdx
+                                              ? {
+                                                  ...item,
+                                                  sets: item.sets.map(
+                                                    (st, j) =>
+                                                      j === sIdx
+                                                        ? {
+                                                            ...st,
+                                                            type: nextType,
+                                                          }
+                                                        : st
+                                                  ),
+                                                }
+                                              : item
+                                        ),
+                                      }
+                                    : null
+                                );
                               }}
                               className="col-span-3 bg-slate-100 rounded-lg px-2 py-1 text-slate-900 font-semibold"
                             >
@@ -836,50 +866,192 @@ export function RoutinesView() {
                             </select>
 
                             <div className="col-span-3 flex items-center gap-1">
-                              <DecimalInput
-                                value={s.weightKg ?? 0}
-                                ariaLabel="Peso (kg)"
-                                onChange={(val) => {
-                                  const updated = [...editingRoutine.exercises];
-                                  updated[exIdx].sets[sIdx].weightKg = val ?? 0;
-                                  setEditingRoutine({
-                                    ...editingRoutine,
-                                    exercises: updated,
-                                  });
-                                }}
-                                className="w-full text-center bg-slate-100 rounded-lg py-1 text-slate-900 font-bold focus:outline-none focus:ring-1 focus:ring-[#0084FF]"
-                              />
-                              <span className="text-slate-500">kg</span>
+                              {meta?.measurementType === 'distance_duration' ? (
+                                <>
+                                  <DecimalInput
+                                    value={s.distanceKm ?? 0}
+                                    ariaLabel="Distância (km)"
+                                    onChange={(val) => {
+                                      setEditingRoutine((prev) =>
+                                        prev
+                                          ? {
+                                              ...prev,
+                                              exercises: prev.exercises.map(
+                                                (item, i) =>
+                                                  i === exIdx
+                                                    ? {
+                                                        ...item,
+                                                        sets: item.sets.map(
+                                                          (st, j) =>
+                                                            j === sIdx
+                                                              ? {
+                                                                  ...st,
+                                                                  distanceKm:
+                                                                    val ?? 0,
+                                                                }
+                                                              : st
+                                                        ),
+                                                      }
+                                                    : item
+                                              ),
+                                            }
+                                          : null
+                                      );
+                                    }}
+                                    className="w-full text-center bg-slate-100 rounded-lg py-1 text-slate-900 font-bold focus:outline-none focus:ring-1 focus:ring-[#0084FF]"
+                                  />
+                                  <span className="text-slate-500">km</span>
+                                </>
+                              ) : (
+                                <>
+                                  <DecimalInput
+                                    value={
+                                      convertWeightFromKg(
+                                        s.weightKg ?? 0,
+                                        weightUnit
+                                      ) ?? 0
+                                    }
+                                    ariaLabel={`Peso (${unitLabel})`}
+                                    onChange={(val) => {
+                                      const kgVal =
+                                        convertWeightToKg(
+                                          val ?? 0,
+                                          weightUnit
+                                        ) ?? 0;
+                                      setEditingRoutine((prev) =>
+                                        prev
+                                          ? {
+                                              ...prev,
+                                              exercises: prev.exercises.map(
+                                                (item, i) =>
+                                                  i === exIdx
+                                                    ? {
+                                                        ...item,
+                                                        sets: item.sets.map(
+                                                          (st, j) =>
+                                                            j === sIdx
+                                                              ? {
+                                                                  ...st,
+                                                                  weightKg:
+                                                                    kgVal,
+                                                                }
+                                                              : st
+                                                        ),
+                                                      }
+                                                    : item
+                                              ),
+                                            }
+                                          : null
+                                      );
+                                    }}
+                                    className="w-full text-center bg-slate-100 rounded-lg py-1 text-slate-900 font-bold focus:outline-none focus:ring-1 focus:ring-[#0084FF]"
+                                  />
+                                  <span className="text-slate-500">
+                                    {unitLabel}
+                                  </span>
+                                </>
+                              )}
                             </div>
 
                             <div className="col-span-3 flex items-center gap-1">
-                              <IntegerInput
-                                value={s.reps ?? 10}
-                                ariaLabel="Repetições"
-                                onChange={(val) => {
-                                  const updated = [...editingRoutine.exercises];
-                                  updated[exIdx].sets[sIdx].reps = val ?? 0;
-                                  setEditingRoutine({
-                                    ...editingRoutine,
-                                    exercises: updated,
-                                  });
-                                }}
-                                className="w-full text-center bg-slate-100 rounded-lg py-1 text-slate-900 font-bold focus:outline-none focus:ring-1 focus:ring-[#0084FF]"
-                              />
-                              <span className="text-slate-500">reps</span>
+                              {meta?.measurementType === 'duration' ||
+                              meta?.measurementType === 'distance_duration' ? (
+                                <>
+                                  <IntegerInput
+                                    value={s.durationSeconds ?? 30}
+                                    ariaLabel="Duração (segundos)"
+                                    onChange={(val) => {
+                                      setEditingRoutine((prev) =>
+                                        prev
+                                          ? {
+                                              ...prev,
+                                              exercises: prev.exercises.map(
+                                                (item, i) =>
+                                                  i === exIdx
+                                                    ? {
+                                                        ...item,
+                                                        sets: item.sets.map(
+                                                          (st, j) =>
+                                                            j === sIdx
+                                                              ? {
+                                                                  ...st,
+                                                                  durationSeconds:
+                                                                    val ?? 0,
+                                                                }
+                                                              : st
+                                                        ),
+                                                      }
+                                                    : item
+                                              ),
+                                            }
+                                          : null
+                                      );
+                                    }}
+                                    className="w-full text-center bg-slate-100 rounded-lg py-1 text-slate-900 font-bold focus:outline-none focus:ring-1 focus:ring-[#0084FF]"
+                                  />
+                                  <span className="text-slate-500">seg</span>
+                                </>
+                              ) : (
+                                <>
+                                  <IntegerInput
+                                    value={s.reps ?? 10}
+                                    ariaLabel="Repetições"
+                                    onChange={(val) => {
+                                      setEditingRoutine((prev) =>
+                                        prev
+                                          ? {
+                                              ...prev,
+                                              exercises: prev.exercises.map(
+                                                (item, i) =>
+                                                  i === exIdx
+                                                    ? {
+                                                        ...item,
+                                                        sets: item.sets.map(
+                                                          (st, j) =>
+                                                            j === sIdx
+                                                              ? {
+                                                                  ...st,
+                                                                  reps:
+                                                                    val ?? 0,
+                                                                }
+                                                              : st
+                                                        ),
+                                                      }
+                                                    : item
+                                              ),
+                                            }
+                                          : null
+                                      );
+                                    }}
+                                    className="w-full text-center bg-slate-100 rounded-lg py-1 text-slate-900 font-bold focus:outline-none focus:ring-1 focus:ring-[#0084FF]"
+                                  />
+                                  <span className="text-slate-500">reps</span>
+                                </>
+                              )}
                             </div>
 
                             <button
                               type="button"
+                              aria-label="Remover série"
                               onClick={() => {
-                                const updated = [...editingRoutine.exercises];
-                                updated[exIdx].sets = updated[
-                                  exIdx
-                                ].sets.filter((_, i) => i !== sIdx);
-                                setEditingRoutine({
-                                  ...editingRoutine,
-                                  exercises: updated,
-                                });
+                                setEditingRoutine((prev) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        exercises: prev.exercises.map(
+                                          (item, i) =>
+                                            i === exIdx
+                                              ? {
+                                                  ...item,
+                                                  sets: item.sets.filter(
+                                                    (_, j) => j !== sIdx
+                                                  ),
+                                                }
+                                              : item
+                                        ),
+                                      }
+                                    : null
+                                );
                               }}
                               className="col-span-1 text-right text-slate-400 hover:text-red-500"
                             >
@@ -892,20 +1064,34 @@ export function RoutinesView() {
                       <button
                         type="button"
                         onClick={() => {
-                          const updated = [...editingRoutine.exercises];
-                          const last =
-                            updated[exIdx].sets[updated[exIdx].sets.length - 1];
-                          updated[exIdx].sets.push({
-                            id: uid('s'),
-                            type: 'normal',
-                            weightKg: last?.weightKg ?? 20,
-                            reps: last?.reps ?? 10,
-                            completed: false,
-                          });
-                          setEditingRoutine({
-                            ...editingRoutine,
-                            exercises: updated,
-                          });
+                          setEditingRoutine((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  exercises: prev.exercises.map((item, i) => {
+                                    if (i !== exIdx) return item;
+                                    const last =
+                                      item.sets[item.sets.length - 1];
+                                    const defaults = createDefaultSetValues(
+                                      meta?.measurementType,
+                                      last
+                                    );
+                                    return {
+                                      ...item,
+                                      sets: [
+                                        ...item.sets,
+                                        {
+                                          id: uid('s'),
+                                          type: 'normal',
+                                          ...defaults,
+                                          completed: false,
+                                        },
+                                      ],
+                                    };
+                                  }),
+                                }
+                              : null
+                          );
                         }}
                         className="text-xs font-bold text-[#0084FF] hover:underline flex items-center gap-1"
                       >

@@ -8,11 +8,22 @@ import {
   calculatePlates,
   calculatePlatesPerSide,
   calculateWeeklyStreakStats,
+  convertWeightFromKg,
+  convertWeightToKg,
+  createDefaultSetValues,
   evaluateWorkoutPRs,
   exportWorkoutsToCSV,
+  formatSetSummary,
+  formatWeightWithUnit,
   generateWarmupSets,
+  getPreviousExerciseSets,
   getRoutineLastTrainedInfo,
+  isSetFilled,
 } from './calculations';
+import {
+  isAllowedPushEndpoint,
+  validatePushSubscription,
+} from './push-validation';
 import { EXERCISES_SEED } from '@/data/exercises-seed';
 import { WorkoutSession } from '@/types/workout';
 import {
@@ -488,7 +499,9 @@ describe('Motores de Cálculo IronPulse', () => {
     expect(drawerHtmlHiddenRpe).not.toContain('>RPE<');
     expect(drawerHtmlHiddenRpe).toContain('Aquecimento');
     expect(drawerHtmlHiddenRpe).toContain('90kg × 8');
-    expect(drawerHtmlHiddenRpe).toContain('🧮 Anilhas');
+    expect(drawerHtmlHiddenRpe).toContain('Anilhas');
+    expect(drawerHtmlHiddenRpe).toContain('aria-label="Título do treino"');
+    expect(drawerHtmlHiddenRpe).toContain('aria-label="Descrição do treino"');
     expect(drawerHtmlHiddenRpe).toContain('w-11 h-11');
 
     // Ativa showRpeColumn = true -> deve exibir cabeçalho RPE
@@ -543,5 +556,230 @@ describe('Motores de Cálculo IronPulse', () => {
       })
     );
     expect(heatmapHtml).toContain('10+ (Alta Carga)');
+  });
+
+  it('protege contra sobrescrita silenciosa de treino ativo (BUG-03) e bloqueia salvar treino vazio (BUG-07)', () => {
+    const store = useWorkoutStore.getState();
+    store.clearAllData();
+
+    store.startEmptyWorkout('Treino Original');
+    store.addExerciseToActiveWorkout('ex-bench-press-barbell');
+
+    // Tentar iniciar outro treino sem force deve acionar pendingWorkoutReplace sem perder o atual
+    store.startEmptyWorkout('Treino Novo');
+    const statePending = useWorkoutStore.getState();
+    expect(statePending.activeWorkout?.title).toBe('Treino Original');
+    expect(statePending.pendingWorkoutReplace?.targetTitle).toBe('Treino Novo');
+
+    // Cancelar mantém o treino original intacto
+    store.cancelPendingWorkoutReplace();
+    expect(useWorkoutStore.getState().pendingWorkoutReplace).toBeNull();
+    expect(useWorkoutStore.getState().activeWorkout?.title).toBe('Treino Original');
+
+    // Concluir com 0 séries concluídas (e markAllFilledSets = false) não deve salvar sessão vazia
+    const emptyResult = store.finishActiveWorkout(false, false);
+    expect(emptyResult).toBeNull();
+    expect(useWorkoutStore.getState().workoutHistory.length).toBe(0);
+    expect(useWorkoutStore.getState().activeWorkout?.title).toBe('Treino Original');
+
+    // Confirmar substituição descarta o atual e inicia o novo
+    store.startEmptyWorkout('Treino Novo');
+    store.confirmPendingWorkoutReplace();
+    expect(useWorkoutStore.getState().activeWorkout?.title).toBe('Treino Novo');
+    expect(useWorkoutStore.getState().pendingWorkoutReplace).toBeNull();
+  });
+
+  it('trata corretamente exercícios bodyweight_reps, duration e distance_duration (BUG-05, BUG-06, BUG-22)', () => {
+    expect(
+      isSetFilled(
+        { id: '1', type: 'normal', weightKg: 0, reps: 15, completed: false },
+        'bodyweight_reps'
+      )
+    ).toBe(true);
+    expect(
+      isSetFilled(
+        { id: '2', type: 'normal', weightKg: 20, reps: 10, durationSeconds: null, completed: false },
+        'duration'
+      )
+    ).toBe(false);
+    expect(
+      isSetFilled(
+        { id: '3', type: 'normal', weightKg: null, reps: null, durationSeconds: 45, completed: false },
+        'duration'
+      )
+    ).toBe(true);
+
+    const durDefaults = createDefaultSetValues('duration');
+    expect(durDefaults.weightKg).toBeNull();
+    expect(durDefaults.reps).toBeNull();
+
+    const bwDefaults = createDefaultSetValues('bodyweight_reps');
+    expect(bwDefaults.weightKg).toBe(0);
+    expect(bwDefaults.reps).toBe(10);
+
+    expect(
+      formatSetSummary(
+        { id: 'd1', type: 'normal', weightKg: null, reps: null, durationSeconds: 90, completed: true },
+        'duration'
+      )
+    ).toBe('1min 30s');
+    expect(
+      formatSetSummary(
+        { id: 'b1', type: 'normal', weightKg: 0, reps: 15, completed: true },
+        'bodyweight_reps'
+      )
+    ).toBe('15 reps (peso corporal)');
+
+    // Verifica na store que Prancha não nasce com 20kg nem infla volume
+    const plankEx = EXERCISES_SEED.find((e) => e.measurementType === 'duration');
+    const bwEx = EXERCISES_SEED.find((e) => e.measurementType === 'bodyweight_reps');
+    expect(plankEx).toBeDefined();
+    expect(bwEx).toBeDefined();
+
+    const store = useWorkoutStore.getState();
+    store.clearAllData();
+    store.startEmptyWorkout('Core e Bodyweight');
+    store.addExerciseToActiveWorkout(plankEx!.id);
+    store.addExerciseToActiveWorkout(bwEx!.id);
+
+    const active = useWorkoutStore.getState().activeWorkout!;
+    expect(active.exercises[0].sets[0].weightKg).toBeNull();
+    expect(active.exercises[0].sets[0].reps).toBeNull();
+    expect(active.exercises[1].sets[0].weightKg).toBe(0);
+
+    // Preenche duração da 1ª série de Prancha e conclui marcando preenchidas
+    store.updateActiveSet(active.exercises[0].id, active.exercises[0].sets[0].id, {
+      durationSeconds: 60,
+    });
+    const saved = store.finishActiveWorkout(false, true);
+    expect(saved).not.toBeNull();
+    // 1 série de prancha preenchida + 3 séries de bodyweight com 10 reps (0kg) = 4 séries, volume = 0
+    expect(saved!.totalSets).toBe(4);
+    expect(saved!.totalVolumeKg).toBe(0);
+  });
+
+  it('duplica rotina profundamente com IDs distintos (BUG-10) e persiste exclusão de exercício padrão (BUG-19)', () => {
+    const store = useWorkoutStore.getState();
+    store.clearAllData();
+    store.saveRoutine({
+      title: 'Push A',
+      description: '',
+      folderId: null,
+      exercises: [
+        {
+          id: 're-orig',
+          exerciseId: 'ex-bench-press-barbell',
+          supersetId: null,
+          restTimerSeconds: 90,
+          notes: '',
+          sets: [
+            { id: 's-orig', type: 'normal', weightKg: 80, reps: 8, completed: false },
+          ],
+        },
+      ],
+    });
+
+    const origId = useWorkoutStore.getState().routines[0].id;
+    store.duplicateRoutine(origId);
+    const [copied, original] = useWorkoutStore.getState().routines;
+    expect(copied.id).not.toBe(original.id);
+    expect(copied.exercises[0].id).not.toBe(original.exercises[0].id);
+    expect(copied.exercises[0].sets[0].id).not.toBe(original.exercises[0].sets[0].id);
+
+    // Excluir exercício do seed registra em deletedExerciseIds
+    const seedId = EXERCISES_SEED[0].id;
+    store.deleteExercise(seedId);
+    expect(useWorkoutStore.getState().deletedExerciseIds).toContain(seedId);
+    expect(
+      useWorkoutStore.getState().exercises.some((e) => e.id === seedId)
+    ).toBe(false);
+  });
+
+  it('preserva endTime e PRs históricos ao editar treino antigo (BUG-14, BUG-15)', () => {
+    const store = useWorkoutStore.getState();
+    store.clearAllData();
+
+    const olderSession: WorkoutSession = {
+      ...SAMPLE_HISTORY[0],
+      id: 'sess-old',
+      startTime: '2026-10-01T10:00:00.000Z',
+      endTime: '2026-10-01T11:00:00.000Z',
+      durationSeconds: 3600,
+    };
+    const newerSession: WorkoutSession = {
+      ...SAMPLE_HISTORY[0],
+      id: 'sess-new',
+      startTime: '2026-11-15T10:00:00.000Z',
+      endTime: '2026-11-15T11:00:00.000Z',
+      exercises: [
+        {
+          ...SAMPLE_HISTORY[0].exercises[0],
+          id: 'we-new',
+          sets: [
+            { id: 'ws-new', type: 'normal', weightKg: 140, reps: 10, completed: true },
+          ],
+        },
+      ],
+    };
+
+    useWorkoutStore.setState({ workoutHistory: [newerSession, olderSession] });
+
+    // getPreviousExerciseSets respeita ordem cronológica mesmo com histórico invertido
+    const prevLatest = getPreviousExerciseSets('ex-bench-press-barbell', [
+      olderSession,
+      newerSession,
+    ]);
+    expect(prevLatest[0].weightKg).toBe(140);
+
+    // Editar treino antigo preserva endTime original e não compara PR contra sessões futuras
+    store.startEditWorkoutSession('sess-old');
+    const updated = store.finishActiveWorkout(false, false);
+    expect(updated).not.toBeNull();
+    expect(updated!.endTime).toBe('2026-10-01T11:00:00.000Z');
+    expect(updated!.prCount).toBeGreaterThan(0);
+  });
+
+  it('sanitiza CSV Injection (BUG-22), valida endpoints de Web Push contra SSRF (BUG-04) e converte kg/lbs (BUG-24)', () => {
+    const maliciousSession: WorkoutSession = {
+      ...SAMPLE_HISTORY[0],
+      title: '=CMD("calc")',
+      description: '+SUM(A1:A2)',
+    };
+    const csv = exportWorkoutsToCSV([maliciousSession], EXERCISES_SEED);
+    expect(csv).toContain("'=CMD");
+    expect(csv).toContain("'+SUM(A1:A2)");
+
+    // SSRF Push endpoint validation
+    expect(isAllowedPushEndpoint('http://127.0.0.1:8080/internal')).toBe(false);
+    expect(isAllowedPushEndpoint('https://evil.example.com/push')).toBe(false);
+    expect(isAllowedPushEndpoint('https://fcm.googleapis.com/fcm/send/abc123')).toBe(true);
+    expect(isAllowedPushEndpoint('https://web.push.apple.com/Q12345')).toBe(true);
+    expect(
+      validatePushSubscription({
+        endpoint: 'https://fcm.googleapis.com/fcm/send/abc',
+        keys: { p256dh: 'short', auth: 'short' },
+      })
+    ).toBeNull();
+    expect(
+      validatePushSubscription({
+        endpoint: 'https://fcm.googleapis.com/fcm/send/abc',
+        keys: { p256dh: 'validP256dhKey123456', auth: 'validAuthKey123456' },
+      })
+    ).not.toBeNull();
+
+    // Conversão kg <-> lbs
+    expect(convertWeightFromKg(100, 'lbs')).toBe(220.5);
+    expect(convertWeightToKg(220.46, 'lbs')).toBeCloseTo(100, 1);
+    expect(formatWeightWithUnit(100, 'lbs')).toBe('220,5lbs');
+    expect(formatWeightWithUnit(15.5, 'kg')).toBe('15,5kg');
+
+    // Gráfico SVG no ExerciseDetailModal usa classes sensíveis ao tema (BUG-09)
+    const detailHtml = renderToStaticMarkup(
+      React.createElement(ExerciseDetailModal, {
+        exercise: EXERCISES_SEED[0],
+        onClose: () => {},
+      })
+    );
+    expect(detailHtml).not.toContain('fill="#0F172A"');
   });
 });

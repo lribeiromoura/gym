@@ -2,6 +2,8 @@
 
 import React, { useState } from 'react';
 import { MUSCLE_LABELS, MuscleGroup } from '@/types/workout';
+import { useWorkoutStore } from '@/store/useWorkoutStore';
+import { convertVolumeFromKg, getWeightUnitLabel } from '@/lib/calculations';
 
 interface BodyHeatmapSVGProps {
   muscleScores?: Record<
@@ -20,6 +22,8 @@ export function BodyHeatmapSVG({
   compact = false,
 }: BodyHeatmapSVGProps) {
   const [selectedMuscle, setSelectedMuscle] = useState<MuscleGroup | null>(null);
+  const weightUnit = useWorkoutStore((s) => s.settings.weightUnit);
+  const unitLabel = getWeightUnitLabel(weightUnit);
 
   const getMuscleColor = (muscle: MuscleGroup): string => {
     if (highlightPrimary) {
@@ -387,7 +391,11 @@ export function BodyHeatmapSVG({
                   {activeInfo.score.toFixed(1)} pts
                 </p>
                 <p className="text-slate-500">
-                  {Math.round(activeInfo.volumeKg).toLocaleString('pt-BR')} kg
+                  {convertVolumeFromKg(
+                    activeInfo.volumeKg,
+                    weightUnit
+                  ).toLocaleString('pt-BR')}{' '}
+                  {unitLabel}
                 </p>
               </div>
             </div>
