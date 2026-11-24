@@ -18,6 +18,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Sparkles,
   Timer,
   Trash2,
   Trophy,
@@ -49,6 +50,7 @@ import {
   isSetFilled,
 } from '@/lib/calculations';
 import { ExerciseDetailModal } from '@/components/exercises/ExerciseDetailModal';
+import { WorkoutAIReportModal } from '@/components/workout/WorkoutAIReportModal';
 import { BodyHeatmapSVG } from '@/components/analytics/BodyHeatmapSVG';
 import {
   enableRestTimerNotifications,
@@ -691,6 +693,7 @@ export function ActiveWorkoutDrawer() {
 
   const [inspectExercise, setInspectExercise] = useState<Exercise | null>(null);
   const [showFinishModal, setShowFinishModal] = useState(false);
+  const [showPostWorkoutAIReport, setShowPostWorkoutAIReport] = useState(false);
 
   // Estado do Bottom Sheet de 3 pontinhos (⋮) idêntico à imagem 1
   const [menuWorkoutExerciseId, setMenuWorkoutExerciseId] = useState<
@@ -949,13 +952,32 @@ export function ActiveWorkoutDrawer() {
             <BodyHeatmapSVG muscleScores={finishedMuscleDist} compact />
           </div>
 
-          <button
-            onClick={clearLastFinishedWorkout}
-            className="w-full py-3.5 rounded-2xl bg-[#0084FF] hover:bg-blue-600 text-white font-extrabold text-sm shadow-lg shadow-blue-500/25 transition"
-          >
-            Fechar Resumo
-          </button>
+          <div className="space-y-2.5">
+            <button
+              type="button"
+              onClick={() => setShowPostWorkoutAIReport(true)}
+              className="w-full h-12 rounded-2xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#3B82F6] font-extrabold text-sm flex items-center justify-center gap-2 transition"
+            >
+              <Sparkles className="w-4 h-4" /> Gerar Relatório para IA
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowPostWorkoutAIReport(false);
+                clearLastFinishedWorkout();
+              }}
+              className="w-full py-3.5 rounded-2xl bg-[#0084FF] hover:bg-blue-600 text-white font-extrabold text-sm shadow-lg shadow-blue-500/25 transition"
+            >
+              Fechar Resumo
+            </button>
+          </div>
         </div>
+
+        <WorkoutAIReportModal
+          session={showPostWorkoutAIReport ? lastFinishedWorkout : null}
+          onClose={() => setShowPostWorkoutAIReport(false)}
+        />
       </div>
     );
   }

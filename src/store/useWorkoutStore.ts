@@ -43,6 +43,7 @@ import {
   resolveUserSettings,
   RestoreMode,
 } from '@/lib/backup';
+import { useNutritionStore } from '@/store/useNutritionStore';
 
 const RESTORE_UNDO_KEY = 'ironpulse-restore-undo';
 
@@ -1180,6 +1181,7 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
           progressPhotos: [],
           settings: INITIAL_USER_SETTINGS,
         });
+        useNutritionStore.getState().clearNutritionData();
       },
 
       markBackupDone: () => {
@@ -1189,6 +1191,9 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
       restoreBackup: (rawData, mode) => {
         const data = normalizeBackupData(rawData);
         const s = get();
+        const nutritionSnapshot = useNutritionStore
+          .getState()
+          .getNutritionBackupData();
         const snapshot = {
           exercises: s.exercises,
           deletedExerciseIds: s.deletedExerciseIds,
@@ -1198,6 +1203,7 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
           measurements: s.measurements,
           progressPhotos: s.progressPhotos,
           settings: s.settings,
+          nutrition: nutritionSnapshot,
         };
         // Lança QuotaExceededError se não couber — nada é alterado nesse caso.
         localStorage.setItem(RESTORE_UNDO_KEY, JSON.stringify(snapshot));
@@ -1240,8 +1246,18 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
               settings: resolveUserSettings({ ...data.settings, ...s.settings }),
             });
           }
+
+          if (data.nutrition) {
+            useNutritionStore
+              .getState()
+              .restoreNutritionData(data.nutrition, mode);
+          }
         } catch (err) {
-          set(snapshot);
+          const { nutrition: rollbackNutrition, ...workoutSnapshot } = snapshot;
+          set(workoutSnapshot);
+          useNutritionStore
+            .getState()
+            .restoreNutritionData(rollbackNutrition, 'replace');
           throw err;
         }
       },
@@ -1251,15 +1267,21 @@ export const useWorkoutStore = create<WorkoutStoreState>()(
         if (!raw) return false;
         try {
           const snapshot = JSON.parse(raw);
+          const { nutrition: savedNutrition, ...workoutSnapshot } = snapshot;
           set({
-            ...snapshot,
-            deletedExerciseIds: Array.isArray(snapshot?.deletedExerciseIds)
-              ? snapshot.deletedExerciseIds
+            ...workoutSnapshot,
+            deletedExerciseIds: Array.isArray(workoutSnapshot?.deletedExerciseIds)
+              ? workoutSnapshot.deletedExerciseIds
               : [],
-            settings: resolveUserSettings(snapshot?.settings),
+            settings: resolveUserSettings(workoutSnapshot?.settings),
             activeWorkout: null,
             pendingWorkoutReplace: null,
           });
+          if (savedNutrition) {
+            useNutritionStore
+              .getState()
+              .restoreNutritionData(savedNutrition, 'replace');
+          }
           localStorage.removeItem(RESTORE_UNDO_KEY);
           return true;
         } catch {

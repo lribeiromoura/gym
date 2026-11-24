@@ -160,6 +160,7 @@ export interface UserSettings {
   weeklyWorkoutGoal: number;
   theme: 'dark' | 'light';
   showRpeColumn: boolean;
+  aiReportPrompt?: string;
 }
 
 export const MUSCLE_LABELS: Record<MuscleGroup, string> = {

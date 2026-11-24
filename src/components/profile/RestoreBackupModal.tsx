@@ -29,6 +29,13 @@ export function RestoreBackupModal({ file, onCancel, onConfirm }: Props) {
     ['Medidas corporais', summary.measurements],
     ['Fotos de progresso', summary.photos],
     ['Exercícios personalizados', summary.customExercises],
+    ...(file.data.nutrition
+      ? ([
+          ['Registros no diário alimentar', summary.foodLogs],
+          ['Refeições salvas / combos', summary.savedMeals],
+          ['Alimentos personalizados', summary.customFoods],
+        ] as [string, number][])
+      : []),
   ];
 
   return (

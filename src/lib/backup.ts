@@ -7,10 +7,18 @@ import type {
   UserSettings,
   WorkoutSession,
 } from '@/types/workout';
+import type {
+  FoodItem,
+  FoodLogEntry,
+  NutritionBackupData,
+  NutritionGoals,
+  NutritionProfile,
+  SavedMeal,
+} from '@/types/nutrition';
 import { INITIAL_USER_SETTINGS } from '@/data/initial-data';
 
 export const BACKUP_APP_ID = 'ironpulse';
-export const BACKUP_SCHEMA_VERSION = 1;
+export const BACKUP_SCHEMA_VERSION = 2;
 
 /**
  * Garante retrocompatibilidade de `UserSettings` para estados salvos no `localStorage`
@@ -38,6 +46,9 @@ export function resolveUserSettings(
       typeof safe.showRpeColumn === 'boolean'
         ? safe.showRpeColumn
         : INITIAL_USER_SETTINGS.showRpeColumn,
+    ...(typeof safe.aiReportPrompt === 'string'
+      ? { aiReportPrompt: safe.aiReportPrompt }
+      : { aiReportPrompt: undefined }),
   };
 }
 
@@ -49,6 +60,7 @@ export interface BackupData {
   measurements: BodyMeasurementEntry[];
   progressPhotos: ProgressPhoto[];
   settings: Partial<UserSettings>;
+  nutrition?: NutritionBackupData;
 }
 
 export interface BackupFile {
@@ -73,6 +85,9 @@ export interface BackupSummary {
   measurements: number;
   photos: number;
   customExercises: number;
+  foodLogs: number;
+  savedMeals: number;
+  customFoods: number;
 }
 
 /** Cria o objeto de backup. Exercícios do seed (seedIds) não são exportados. */
@@ -93,6 +108,7 @@ export function createBackup(
       measurements: state.measurements,
       progressPhotos: options.includePhotos ? state.progressPhotos : [],
       settings: state.settings,
+      ...(state.nutrition ? { nutrition: state.nutrition } : {}),
     },
   };
 }
@@ -232,6 +248,38 @@ export function normalizeBackupData(data: BackupData): BackupData {
     a.date.localeCompare(b.date)
   );
 
+  let safeNutrition: NutritionBackupData | undefined;
+  if (data.nutrition && isObject(data.nutrition)) {
+    const rawWater = isObject(data.nutrition.waterByDate)
+      ? data.nutrition.waterByDate
+      : {};
+    const safeWater: Record<string, number> = {};
+    for (const [k, v] of Object.entries(rawWater)) {
+      if (typeof v === 'number' && Number.isFinite(v) && v >= 0) {
+        safeWater[k] = Math.round(v);
+      }
+    }
+
+    safeNutrition = {
+      customFoods: Array.isArray(data.nutrition.customFoods)
+        ? data.nutrition.customFoods
+        : [],
+      foodLogs: Array.isArray(data.nutrition.foodLogs)
+        ? data.nutrition.foodLogs
+        : [],
+      waterByDate: safeWater,
+      savedMeals: Array.isArray(data.nutrition.savedMeals)
+        ? data.nutrition.savedMeals
+        : [],
+      profile: (isObject(data.nutrition.profile)
+        ? data.nutrition.profile
+        : {}) as unknown as NutritionProfile,
+      goals: (isObject(data.nutrition.goals)
+        ? data.nutrition.goals
+        : {}) as unknown as NutritionGoals,
+    };
+  }
+
   return {
     exercises: safeExercises,
     folders: data.folders || [],
@@ -240,6 +288,86 @@ export function normalizeBackupData(data: BackupData): BackupData {
     measurements: safeMeasurements,
     progressPhotos: data.progressPhotos || [],
     settings: data.settings || {},
+    ...(safeNutrition ? { nutrition: safeNutrition } : {}),
+  };
+}
+
+function validateNutritionBackup(
+  raw: unknown
+): { ok: true; value: NutritionBackupData } | { ok: false; error: string } {
+  if (!isObject(raw)) {
+    return { ok: false, error: 'Backup corrompido: "nutrition" inválido.' };
+  }
+
+  const customFoods = raw.customFoods === undefined ? [] : raw.customFoods;
+  if (
+    !Array.isArray(customFoods) ||
+    !customFoods.every(
+      (f) => isObject(f) && typeof f.id === 'string' && typeof f.name === 'string'
+    )
+  ) {
+    return {
+      ok: false,
+      error: 'Backup corrompido: "nutrition.customFoods" inválido.',
+    };
+  }
+
+  const foodLogs = raw.foodLogs === undefined ? [] : raw.foodLogs;
+  if (
+    !Array.isArray(foodLogs) ||
+    !foodLogs.every(
+      (e) =>
+        isObject(e) &&
+        typeof e.id === 'string' &&
+        typeof e.date === 'string' &&
+        typeof e.foodName === 'string'
+    )
+  ) {
+    return {
+      ok: false,
+      error: 'Backup corrompido: "nutrition.foodLogs" inválido.',
+    };
+  }
+
+  const savedMeals = raw.savedMeals === undefined ? [] : raw.savedMeals;
+  if (
+    !Array.isArray(savedMeals) ||
+    !savedMeals.every(
+      (m) =>
+        isObject(m) &&
+        typeof m.id === 'string' &&
+        typeof m.name === 'string' &&
+        Array.isArray(m.items)
+    )
+  ) {
+    return {
+      ok: false,
+      error: 'Backup corrompido: "nutrition.savedMeals" inválido.',
+    };
+  }
+
+  const waterByDateRaw = raw.waterByDate === undefined ? {} : raw.waterByDate;
+  if (!isObject(waterByDateRaw)) {
+    return {
+      ok: false,
+      error: 'Backup corrompido: "nutrition.waterByDate" inválido.',
+    };
+  }
+
+  return {
+    ok: true,
+    value: {
+      customFoods: customFoods as FoodItem[],
+      foodLogs: foodLogs as FoodLogEntry[],
+      waterByDate: waterByDateRaw as Record<string, number>,
+      savedMeals: savedMeals as SavedMeal[],
+      profile: (isObject(raw.profile)
+        ? raw.profile
+        : {}) as unknown as NutritionProfile,
+      goals: (isObject(raw.goals)
+        ? raw.goals
+        : {}) as unknown as NutritionGoals,
+    },
   };
 }
 
@@ -289,6 +417,14 @@ export function parseBackup(text: string): ParseResult {
     ? (rawData.settings as Partial<UserSettings>)
     : {};
 
+  if (rawData.nutrition !== undefined) {
+    const nutritionValidation = validateNutritionBackup(rawData.nutrition);
+    if (!nutritionValidation.ok) {
+      return nutritionValidation;
+    }
+    data.nutrition = nutritionValidation.value;
+  }
+
   return {
     ok: true,
     file: {
@@ -302,6 +438,7 @@ export function parseBackup(text: string): ParseResult {
 }
 
 export function summarizeBackup(file: BackupFile): BackupSummary {
+  const nutrition = file.data.nutrition;
   return {
     exportedAt: file.exportedAt,
     workouts: file.data.workoutHistory.length,
@@ -310,6 +447,9 @@ export function summarizeBackup(file: BackupFile): BackupSummary {
     measurements: file.data.measurements.length,
     photos: file.data.progressPhotos.length,
     customExercises: file.data.exercises.length,
+    foodLogs: nutrition?.foodLogs?.length ?? 0,
+    savedMeals: nutrition?.savedMeals?.length ?? 0,
+    customFoods: nutrition?.customFoods?.length ?? 0,
   };
 }
 

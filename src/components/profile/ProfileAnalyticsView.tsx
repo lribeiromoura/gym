@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { MUSCLE_LABELS, MuscleGroup } from '@/types/workout';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
+import { useNutritionStore } from '@/store/useNutritionStore';
 import { INITIAL_EXERCISES } from '@/data/initial-data';
 import {
   BackupFile,
@@ -94,6 +95,9 @@ export function ProfileAnalyticsView() {
   const handleExportBackup = async () => {
     setIsExporting(true);
     try {
+      const nutritionBackup = useNutritionStore
+        .getState()
+        .getNutritionBackupData();
       const file = createBackup(
         {
           exercises,
@@ -103,6 +107,7 @@ export function ProfileAnalyticsView() {
           measurements,
           progressPhotos,
           settings,
+          nutrition: nutritionBackup,
         },
         {
           includePhotos: includePhotosInBackup,
@@ -1172,8 +1177,8 @@ export function ProfileAnalyticsView() {
                 </h3>
                 <p className="text-xs text-slate-500 leading-relaxed mt-1">
                   Seus dados ficam salvos apenas neste aparelho. Exporte um backup em{' '}
-                  <code>.json</code> (rotinas, histórico, medidas, fotos e configurações) e
-                  restaure quando trocar de celular ou limpar o navegador.
+                  <code>.json</code> (rotinas, histórico, nutrição, medidas, fotos e
+                  configurações) e restaure quando trocar de celular ou limpar o navegador.
                 </p>
               </div>
             </div>

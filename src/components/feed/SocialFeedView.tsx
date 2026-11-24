@@ -11,10 +11,11 @@ import {
   Edit3,
   Play,
   Share2,
+  Sparkles,
   Trash2,
   Trophy,
 } from 'lucide-react';
-import { MUSCLE_LABELS } from '@/types/workout';
+import { MUSCLE_LABELS, WorkoutSession } from '@/types/workout';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import {
   calculate1RM,
@@ -29,6 +30,7 @@ import {
   encodeRoutineShareToken,
   shareOrCopyLink,
 } from '@/lib/share';
+import { WorkoutAIReportModal } from '@/components/workout/WorkoutAIReportModal';
 
 export function SocialFeedView() {
   const workoutHistory = useWorkoutStore((s) => s.workoutHistory);
@@ -51,6 +53,9 @@ export function SocialFeedView() {
   >({});
   const [savedToastId, setSavedToastId] = useState<string | null>(null);
   const [sharedSessionId, setSharedSessionId] = useState<string | null>(null);
+  const [aiReportSession, setAiReportSession] = useState<WorkoutSession | null>(
+    null
+  );
 
   const exerciseMap = useMemo(
     () => new Map(exercises.map((e) => [e.id, e])),
@@ -130,6 +135,17 @@ export function SocialFeedView() {
                   </p>
 
                   <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setAiReportSession(w)}
+                      title="Gerar Relatório de Treino para Avaliação por IA"
+                      aria-label="Relatório para IA"
+                      className="h-11 px-3 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-xs font-bold text-[#3B82F6] flex items-center gap-1.5 transition"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      <span>Relatório IA</span>
+                    </button>
+
                     <button
                       onClick={async () => {
                         const token = encodeRoutineShareToken(
@@ -412,6 +428,12 @@ export function SocialFeedView() {
           })}
         </div>
       )}
+
+      {/* Modal de Relatório de Treino para Avaliação por IA */}
+      <WorkoutAIReportModal
+        session={aiReportSession}
+        onClose={() => setAiReportSession(null)}
+      />
     </div>
   );
 }

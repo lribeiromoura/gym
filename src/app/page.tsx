@@ -12,6 +12,7 @@ import {
   Sun,
   Trophy,
   User,
+  Utensils,
 } from 'lucide-react';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
 import { RoutinesView } from '@/components/routines/RoutinesView';
@@ -19,10 +20,11 @@ import { SharedImportModal } from '@/components/routines/SharedImportModal';
 import { SocialFeedView } from '@/components/feed/SocialFeedView';
 import { ExercisesView } from '@/components/exercises/ExercisesView';
 import { ProfileAnalyticsView } from '@/components/profile/ProfileAnalyticsView';
+import { NutritionView } from '@/components/nutrition/NutritionView';
 import { ActiveWorkoutDrawer } from '@/components/workout/ActiveWorkoutDrawer';
 import { decodeShareToken, SharePayload } from '@/lib/share';
 
-type MainTab = 'workout' | 'feed' | 'exercises' | 'profile';
+type MainTab = 'workout' | 'nutrition' | 'feed' | 'exercises' | 'profile';
 
 export default function IronPulseAppPage() {
   const [activeTab, setActiveTab] = useState<MainTab>('workout');
@@ -85,12 +87,14 @@ export default function IronPulseAppPage() {
   const navItems: {
     id: MainTab;
     label: string;
+    mobileLabel: string;
     icon: React.ComponentType<{ className?: string }>;
   }[] = [
-    { id: 'workout', label: 'Treinar', icon: Dumbbell },
-    { id: 'feed', label: 'Histórico', icon: ClipboardList },
-    { id: 'exercises', label: 'Exercícios', icon: Search },
-    { id: 'profile', label: 'Perfil & Analytics', icon: User },
+    { id: 'workout', label: 'Treinar', mobileLabel: 'Treinar', icon: Dumbbell },
+    { id: 'nutrition', label: 'Nutrição', mobileLabel: 'Nutrição', icon: Utensils },
+    { id: 'feed', label: 'Histórico', mobileLabel: 'Histórico', icon: ClipboardList },
+    { id: 'exercises', label: 'Exercícios', mobileLabel: 'Exercícios', icon: Search },
+    { id: 'profile', label: 'Perfil & Analytics', mobileLabel: 'Perfil', icon: User },
   ];
 
   const isMinimized = Boolean(activeWorkout?.isMinimized);
@@ -240,14 +244,15 @@ export default function IronPulseAppPage() {
       >
         <div className="max-w-5xl mx-auto p-4 sm:p-6 md:p-8">
           {activeTab === 'workout' && <RoutinesView />}
+          {activeTab === 'nutrition' && <NutritionView />}
           {activeTab === 'feed' && <SocialFeedView />}
           {activeTab === 'exercises' && <ExercisesView />}
           {activeTab === 'profile' && <ProfileAnalyticsView />}
         </div>
       </main>
 
-      {/* Barra de Navegação Inferior Mobile com Safe Area do iPhone */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 grid grid-cols-4 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] px-2">
+      {/* Barra de Navegação Inferior Mobile com Safe Area do iPhone (5 abas) */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 grid grid-cols-5 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] px-1">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -255,14 +260,14 @@ export default function IronPulseAppPage() {
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
-              className={`min-h-[48px] flex flex-col items-center justify-center py-1.5 rounded-xl text-xs font-bold transition ${
+              className={`min-h-[48px] flex flex-col items-center justify-center py-1.5 px-0.5 rounded-xl text-[11px] leading-tight font-bold transition whitespace-nowrap ${
                 isActive
                   ? 'text-[#3B82F6]'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <Icon className="w-5 h-5 mb-0.5" />
-              {item.label.split(' ')[0]}
+              <Icon className="w-5 h-5 mb-0.5 shrink-0" />
+              <span>{item.mobileLabel}</span>
             </button>
           );
         })}
