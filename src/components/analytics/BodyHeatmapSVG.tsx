@@ -59,7 +59,7 @@ export function BodyHeatmapSVG({
         {/* ================= VISTA FRONTAL ================= */}
         <div className="flex flex-col items-center w-full">
           {!compact && (
-            <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold mb-2">
+            <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
               Frente
             </span>
           )}
@@ -207,7 +207,7 @@ export function BodyHeatmapSVG({
         {/* ================= VISTA POSTERIOR ================= */}
         <div className="flex flex-col items-center w-full">
           {!compact && (
-            <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold mb-2">
+            <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
               Costas
             </span>
           )}
@@ -352,45 +352,60 @@ export function BodyHeatmapSVG({
 
       {!compact && !highlightPrimary && (
         <div className="w-full mt-3 space-y-2.5">
-          <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-slate-600">
-            <span className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 flex items-center gap-1.5 font-medium">
-              <span className="w-3.5 h-3.5 rounded-sm bg-[#475569] border border-white/20 shrink-0" />
+          <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
+            <span className="px-2.5 py-1 rounded-lg bg-secondary/70 border border-border flex items-center gap-1.5 font-medium text-foreground">
+              <span
+                className="w-3.5 h-3.5 rounded-sm border border-border/60 shrink-0"
+                style={{ backgroundColor: '#475569' }}
+              />
               <span>0 séries</span>
             </span>
-            <span className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 flex items-center gap-1.5 font-medium">
-              <span className="w-3.5 h-3.5 rounded-sm bg-[#7DD3FC] border border-sky-400/50 shrink-0" />
+            <span className="px-2.5 py-1 rounded-lg bg-secondary/70 border border-border flex items-center gap-1.5 font-medium text-foreground">
+              <span
+                className="w-3.5 h-3.5 rounded-sm border border-sky-400/50 shrink-0"
+                style={{ backgroundColor: '#7DD3FC' }}
+              />
               <span>1–3 séries</span>
             </span>
-            <span className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 flex items-center gap-1.5 font-medium">
-              <span className="w-3.5 h-3.5 rounded-sm bg-[#3B82F6] border border-blue-400/50 shrink-0" />
+            <span className="px-2.5 py-1 rounded-lg bg-secondary/70 border border-border flex items-center gap-1.5 font-medium text-foreground">
+              <span
+                className="w-3.5 h-3.5 rounded-sm border border-blue-400/50 shrink-0"
+                style={{ backgroundColor: '#3B82F6' }}
+              />
               <span>4–6 séries</span>
             </span>
-            <span className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 flex items-center gap-1.5 font-medium">
-              <span className="w-3.5 h-3.5 rounded-sm bg-[#1D4ED8] border border-indigo-400/50 shrink-0" />
+            <span className="px-2.5 py-1 rounded-lg bg-secondary/70 border border-border flex items-center gap-1.5 font-medium text-foreground">
+              <span
+                className="w-3.5 h-3.5 rounded-sm border border-indigo-400/50 shrink-0"
+                style={{ backgroundColor: '#1D4ED8' }}
+              />
               <span>7–10 séries</span>
             </span>
-            <span className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 flex items-center gap-1.5 font-semibold">
-              <span className="w-3.5 h-3.5 rounded-sm bg-[#F59E0B] border border-amber-300/60 shrink-0" />
+            <span className="px-2.5 py-1 rounded-lg bg-secondary/70 border border-border flex items-center gap-1.5 font-semibold text-foreground">
+              <span
+                className="w-3.5 h-3.5 rounded-sm border border-amber-300/60 shrink-0"
+                style={{ backgroundColor: '#F59E0B' }}
+              />
               <span>10+ (Alta Carga)</span>
             </span>
           </div>
 
           {selectedMuscle && activeInfo && (
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between text-xs animate-fadeIn">
+            <div className="bg-secondary/70 border border-border rounded-xl p-3 flex items-center justify-between gap-3 text-xs animate-in fade-in-0 duration-200">
               <div>
-                <p className="font-semibold text-slate-900">
+                <p className="font-semibold text-foreground">
                   {MUSCLE_LABELS[selectedMuscle]}
                 </p>
-                <p className="text-slate-500">
+                <p className="text-muted-foreground">
                   {activeInfo.primarySets} séries diretas •{' '}
                   {activeInfo.secondarySets} séries sinergistas
                 </p>
               </div>
-              <div className="text-right">
-                <p className="text-[#0084FF] font-bold">
+              <div className="text-right shrink-0">
+                <p className="text-blue-600 dark:text-blue-400 font-bold tabular-nums">
                   {activeInfo.score.toFixed(1)} pts
                 </p>
-                <p className="text-slate-500">
+                <p className="text-muted-foreground tabular-nums">
                   {convertVolumeFromKg(
                     activeInfo.volumeKg,
                     weightUnit

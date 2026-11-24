@@ -1,275 +1,52 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  Activity,
-  AlertTriangle,
   BarChart3,
-  Bell,
   Camera,
   Check,
-  CheckCircle2,
-  Download,
   Edit3,
-  Flame,
-  Plus,
   Ruler,
-  Scale,
   Settings,
-  ShieldCheck,
-  Trash2,
-  Undo2,
-  Upload,
   X,
 } from 'lucide-react';
-import { MUSCLE_LABELS, MuscleGroup } from '@/types/workout';
+import { toast } from 'sonner';
 import { useWorkoutStore } from '@/store/useWorkoutStore';
-import { useNutritionStore } from '@/store/useNutritionStore';
-import { INITIAL_EXERCISES } from '@/data/initial-data';
-import {
-  BackupFile,
-  createBackup,
-  parseBackup,
-  RestoreMode,
-  shareOrDownloadBackup,
-} from '@/lib/backup';
+import { BackupFile, RestoreMode } from '@/lib/backup';
+import { convertVolumeFromKg } from '@/lib/calculations';
 import { RestoreBackupModal } from '@/components/profile/RestoreBackupModal';
+import { AnalyticsTab } from '@/components/profile/AnalyticsTab';
+import { MeasurementsTab } from '@/components/profile/MeasurementsTab';
+import { ProgressPhotosTab } from '@/components/profile/ProgressPhotosTab';
 import {
-  calculateMuscleDistribution,
-  convertVolumeFromKg,
-  convertWeightToKg,
-  exportWorkoutsToCSV,
-  formatWeightValue,
-  getWeightUnitLabel,
-} from '@/lib/calculations';
-import {
-  enableRestTimerNotifications,
-  getNotificationPermissionState,
-  triggerImmediateRestNotification,
-} from '@/lib/notifications';
-import { BodyHeatmapSVG } from '@/components/analytics/BodyHeatmapSVG';
+  BackupFeedbackState,
+  DataAndSettingsTab,
+} from '@/components/profile/DataAndSettingsTab';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
+type ProfileSubTab = 'analytics' | 'measurements' | 'photos' | 'data';
 
 export function ProfileAnalyticsView() {
   const workoutHistory = useWorkoutStore((s) => s.workoutHistory);
-  const exercises = useWorkoutStore((s) => s.exercises);
-  const measurements = useWorkoutStore((s) => s.measurements);
-  const progressPhotos = useWorkoutStore((s) => s.progressPhotos);
   const settings = useWorkoutStore((s) => s.settings);
-
-  const addBodyMeasurement = useWorkoutStore((s) => s.addBodyMeasurement);
-  const deleteBodyMeasurement = useWorkoutStore((s) => s.deleteBodyMeasurement);
-  const addProgressPhoto = useWorkoutStore((s) => s.addProgressPhoto);
-  const deleteProgressPhoto = useWorkoutStore((s) => s.deleteProgressPhoto);
   const updateSettings = useWorkoutStore((s) => s.updateSettings);
-  const clearAllData = useWorkoutStore((s) => s.clearAllData);
-  const routines = useWorkoutStore((s) => s.routines);
-  const folders = useWorkoutStore((s) => s.folders);
-  const lastBackupAt = useWorkoutStore((s) => s.lastBackupAt);
-  const markBackupDone = useWorkoutStore((s) => s.markBackupDone);
   const restoreBackup = useWorkoutStore((s) => s.restoreBackup);
   const undoLastRestore = useWorkoutStore((s) => s.undoLastRestore);
 
-  const [includePhotosInBackup, setIncludePhotosInBackup] = useState(true);
-  const [pendingRestore, setPendingRestore] = useState<BackupFile | null>(null);
-  const [backupMessage, setBackupMessage] = useState<{
-    type: 'success' | 'error';
-    text: string;
-    canUndo?: boolean;
-  } | null>(null);
-  const [isExporting, setIsExporting] = useState(false);
-  const restoreInputRef = useRef<HTMLInputElement>(null);
-
-  const daysSinceBackup = lastBackupAt
-    ? Math.floor((Date.now() - new Date(lastBackupAt).getTime()) / 86_400_000)
-    : null;
-  const backupOverdue = daysSinceBackup === null || daysSinceBackup > 7;
-  const lastBackupLabel =
-    daysSinceBackup === null
-      ? 'Nenhum backup realizado ainda'
-      : daysSinceBackup === 0
-        ? 'Último backup: hoje'
-        : daysSinceBackup === 1
-          ? 'Último backup: ontem'
-          : `Último backup: há ${daysSinceBackup} dias`;
-
-  const handleExportBackup = async () => {
-    setIsExporting(true);
-    try {
-      const nutritionBackup = useNutritionStore
-        .getState()
-        .getNutritionBackupData();
-      const file = createBackup(
-        {
-          exercises,
-          folders,
-          routines,
-          workoutHistory,
-          measurements,
-          progressPhotos,
-          settings,
-          nutrition: nutritionBackup,
-        },
-        {
-          includePhotos: includePhotosInBackup,
-          seedIds: new Set(INITIAL_EXERCISES.map((e) => e.id)),
-        }
-      );
-      const result = await shareOrDownloadBackup(file);
-      if (result !== 'cancelled') {
-        markBackupDone();
-        setBackupMessage({ type: 'success', text: 'Backup exportado com sucesso!' });
-      }
-    } catch {
-      setBackupMessage({ type: 'error', text: 'Não foi possível exportar o backup.' });
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  const handleRestoreFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const input = e.target;
-    const selected = input.files?.[0];
-    input.value = '';
-    if (!selected) return;
-    const parsed = parseBackup(await selected.text());
-    if (!parsed.ok) {
-      setBackupMessage({ type: 'error', text: parsed.error });
-      return;
-    }
-    setPendingRestore(parsed.file);
-  };
-
-  const handleConfirmRestore = (mode: RestoreMode) => {
-    if (!pendingRestore) return;
-    try {
-      restoreBackup(pendingRestore.data, mode);
-      setBackupMessage({
-        type: 'success',
-        text: mode === 'replace' ? 'Backup restaurado com sucesso!' : 'Backup mesclado com sucesso!',
-        canUndo: true,
-      });
-    } catch (err) {
-      const quota = (err as Error)?.name === 'QuotaExceededError';
-      setBackupMessage({
-        type: 'error',
-        text: quota
-          ? 'Sem espaço no armazenamento do navegador. Tente um backup sem fotos.'
-          : 'Não foi possível restaurar o backup. Nenhum dado foi alterado.',
-      });
-    } finally {
-      setPendingRestore(null);
-    }
-  };
-
-  const handleUndoRestore = () => {
-    if (undoLastRestore()) {
-      setBackupMessage({ type: 'success', text: 'Restauração desfeita.' });
-    } else {
-      setBackupMessage({ type: 'error', text: 'Não há restauração para desfazer.' });
-    }
-  };
-
+  const [subTab, setSubTab] = useState<ProfileSubTab>('analytics');
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(settings.name);
   const [bioInput, setBioInput] = useState(settings.bio);
 
-  const [subTab, setSubTab] = useState<
-    'analytics' | 'measurements' | 'photos' | 'data'
-  >('analytics');
-  const [periodDays, setPeriodDays] = useState<number | 'all'>('all');
-  const [chartType, setChartType] = useState<'volume' | 'duration' | 'sets'>(
-    'volume'
-  );
-  const [measureMetric, setMeasureMetric] = useState<
-    | 'weightKg'
-    | 'bodyFatPct'
-    | 'rightBicepCm'
-    | 'chestCm'
-    | 'waistCm'
-    | 'rightThighCm'
-  >('weightKg');
-
-  const [showAddMeasurement, setShowAddMeasurement] = useState(false);
-  const [measurementError, setMeasurementError] = useState<string | null>(null);
-  const [photoError, setPhotoError] = useState<string | null>(null);
-  const [mDate, setMDate] = useState(new Date().toISOString().slice(0, 10));
-  const [mWeight, setMWeight] = useState('');
-  const [mBodyFat, setMBodyFat] = useState('');
-  const [mKcal, setMKcal] = useState('');
-  const [mChest, setMChest] = useState('');
-  const [mBicep, setMBicep] = useState('');
-  const [mWaist, setMWaist] = useState('');
-  const [mThigh, setMThigh] = useState('');
-  const [mCalf, setMCalf] = useState('');
+  const [pendingRestore, setPendingRestore] = useState<BackupFile | null>(null);
+  const [backupFeedback, setBackupFeedback] =
+    useState<BackupFeedbackState | null>(null);
 
   const weightUnit = settings?.weightUnit === 'lbs' ? 'lbs' : 'kg';
-  const unitLabel = getWeightUnitLabel(weightUnit);
-
-  const resetMeasurementForm = () => {
-    setMDate(new Date().toISOString().slice(0, 10));
-    setMWeight('');
-    setMBodyFat('');
-    setMKcal('');
-    setMChest('');
-    setMBicep('');
-    setMWaist('');
-    setMThigh('');
-    setMCalf('');
-    setMeasurementError(null);
-  };
-
-  const [csvFeedback, setCsvFeedback] = useState<string | null>(null);
-  const [notifStatus, setNotifStatus] = useState<
-    NotificationPermission | 'unsupported'
-  >('default');
-  const [notifMessage, setNotifMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    setNotifStatus(getNotificationPermissionState());
-  }, []);
-
-  const filteredWorkouts = useMemo(() => {
-    if (periodDays === 'all') return workoutHistory;
-    const cutoff = Date.now() - periodDays * 24 * 3600 * 1000;
-    return workoutHistory.filter(
-      (w) => new Date(w.startTime).getTime() >= cutoff
-    );
-  }, [workoutHistory, periodDays]);
-
-  const muscleDistribution = useMemo(
-    () => calculateMuscleDistribution(filteredWorkouts, exercises),
-    [filteredWorkouts, exercises]
-  );
-
-  const radarAxes = useMemo(() => {
-    const d = muscleDistribution;
-    const raw = [
-      { label: 'Peito', val: d.chest.score },
-      {
-        label: 'Costas',
-        val: d.lats.score + d.upper_back.score + d.lower_back.score,
-      },
-      { label: 'Ombros', val: d.shoulders.score + d.traps.score },
-      {
-        label: 'Braços',
-        val: d.biceps.score + d.triceps.score + d.forearms.score,
-      },
-      {
-        label: 'Pernas',
-        val:
-          d.quads.score +
-          d.hamstrings.score +
-          d.glutes.score +
-          d.calves.score,
-      },
-      { label: 'Core', val: d.abs.score + d.lower_back.score * 0.5 },
-    ];
-    const maxVal = Math.max(...raw.map((r) => r.val), 6);
-    return raw.map((r) => ({
-      ...r,
-      norm: Math.min(1, r.val / maxVal),
-    }));
-  }, [muscleDistribution]);
 
   const totalStats = useMemo(() => {
     const totalWorkouts = workoutHistory.length;
@@ -278,12 +55,16 @@ export function ProfileAnalyticsView() {
       0
     );
     const totalPRs = workoutHistory.reduce((acc, w) => acc + w.prCount, 0);
-    const totalDuration = workoutHistory.reduce(
-      (acc, w) => acc + w.durationSeconds,
-      0
-    );
-    return { totalWorkouts, totalVolume, totalPRs, totalDuration };
+    return { totalWorkouts, totalVolume, totalPRs };
   }, [workoutHistory]);
+
+  const initials = (settings.name || 'U')
+    .split(' ')
+    .filter(Boolean)
+    .map((n) => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
 
   const handleSaveName = (e: React.FormEvent) => {
     e.preventDefault();
@@ -293,210 +74,57 @@ export function ProfileAnalyticsView() {
       bio: bioInput.trim(),
     });
     setIsEditingName(false);
+    toast.success('Perfil atualizado!');
   };
 
-  const handleSaveMeasurement = (e: React.FormEvent) => {
-    e.preventDefault();
-    setMeasurementError(null);
-
-    if (!mDate || Number.isNaN(new Date(mDate + 'T12:00:00').getTime())) {
-      setMeasurementError('Informe uma data válida.');
-      return;
-    }
-
-    const parseOptionalPositive = (
-      raw: string,
-      label: string,
-      maxVal?: number
-    ): { ok: true; value: number | undefined } | { ok: false; error: string } => {
-      const trimmed = raw.trim();
-      if (!trimmed) return { ok: true, value: undefined };
-      const num = Number(trimmed);
-      if (!Number.isFinite(num) || num <= 0) {
-        return { ok: false, error: `${label} deve ser um valor maior que zero.` };
-      }
-      if (maxVal !== undefined && num > maxVal) {
-        return { ok: false, error: `${label} deve ser no máximo ${maxVal}.` };
-      }
-      return { ok: true, value: num };
-    };
-
-    const parsedWeight = parseOptionalPositive(mWeight, 'Peso corporal', 500);
-    const parsedBf = parseOptionalPositive(mBodyFat, 'Gordura BF (%)', 100);
-    const parsedKcal = parseOptionalPositive(mKcal, 'Calorias', 20000);
-    const parsedChest = parseOptionalPositive(mChest, 'Peito', 300);
-    const parsedBicep = parseOptionalPositive(mBicep, 'Bíceps', 150);
-    const parsedWaist = parseOptionalPositive(mWaist, 'Cintura', 300);
-    const parsedThigh = parseOptionalPositive(mThigh, 'Coxa', 200);
-    const parsedCalf = parseOptionalPositive(mCalf, 'Panturrilha', 150);
-
-    const allChecks = [
-      parsedWeight,
-      parsedBf,
-      parsedKcal,
-      parsedChest,
-      parsedBicep,
-      parsedWaist,
-      parsedThigh,
-      parsedCalf,
-    ];
-    const firstErr = allChecks.find((c) => !c.ok);
-    if (firstErr && !firstErr.ok) {
-      setMeasurementError(firstErr.error);
-      return;
-    }
-
-    const hasAtLeastOne = allChecks.some(
-      (c) => c.ok && c.value !== undefined
-    );
-    if (!hasAtLeastOne) {
-      setMeasurementError(
-        'Preencha pelo menos uma medida corporal antes de salvar.'
-      );
-      return;
-    }
-
-    const weightKgVal =
-      parsedWeight.ok && parsedWeight.value !== undefined
-        ? (convertWeightToKg(parsedWeight.value, weightUnit) ?? undefined)
-        : undefined;
-
-    addBodyMeasurement({
-      date: mDate,
-      weightKg: weightKgVal,
-      bodyFatPct: parsedBf.ok ? parsedBf.value : undefined,
-      caloricIntakeKcal: parsedKcal.ok ? parsedKcal.value : undefined,
-      chestCm: parsedChest.ok ? parsedChest.value : undefined,
-      leftBicepCm: parsedBicep.ok ? parsedBicep.value : undefined,
-      rightBicepCm: parsedBicep.ok ? parsedBicep.value : undefined,
-      waistCm: parsedWaist.ok ? parsedWaist.value : undefined,
-      leftThighCm: parsedThigh.ok ? parsedThigh.value : undefined,
-      rightThighCm: parsedThigh.ok ? parsedThigh.value : undefined,
-      calfCm: parsedCalf.ok ? parsedCalf.value : undefined,
-    });
-    resetMeasurementForm();
-    setShowAddMeasurement(false);
-  };
-
-  const handleDownloadCSV = () => {
-    const csvContent = exportWorkoutsToCSV(workoutHistory, exercises);
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ironpulse_workouts_${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setCsvFeedback('Arquivo CSV exportado com sucesso!');
-  };
-
-  const compressImageFile = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(new Error('Falha ao ler imagem.'));
-      reader.onload = () => {
-        if (typeof reader.result !== 'string') {
-          reject(new Error('Formato de imagem inválido.'));
-          return;
-        }
-        const img = new Image();
-        img.onerror = () => reject(new Error('Arquivo não é uma imagem válida.'));
-        img.onload = () => {
-          const MAX_EDGE = 960;
-          let { width, height } = img;
-          if (width > MAX_EDGE || height > MAX_EDGE) {
-            if (width >= height) {
-              height = Math.round((height * MAX_EDGE) / width);
-              width = MAX_EDGE;
-            } else {
-              width = Math.round((width * MAX_EDGE) / height);
-              height = MAX_EDGE;
-            }
-          }
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) {
-            resolve(reader.result as string);
-            return;
-          }
-          ctx.drawImage(img, 0, 0, width, height);
-          const compressed = canvas.toDataURL('image/jpeg', 0.78);
-          resolve(compressed);
-        };
-        img.src = reader.result;
-      };
-      reader.readAsDataURL(file);
-    });
-
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const input = e.target;
-    const file = input.files?.[0];
-    input.value = '';
-    if (!file) return;
-    setPhotoError(null);
-
-    if (!file.type.startsWith('image/')) {
-      setPhotoError('Selecione um arquivo de imagem válido (JPG, PNG, WebP).');
-      return;
-    }
-
+  const handleConfirmRestore = (mode: RestoreMode) => {
+    if (!pendingRestore) return;
     try {
-      const dataUrl = await compressImageFile(file);
-      // Protege contra estouro do limite de ~5MB do localStorage
-      const approxCurrentBytes =
-        typeof localStorage !== 'undefined'
-          ? (localStorage.getItem('ironpulse-storage-v3')?.length ?? 0) * 2
-          : 0;
-      const incomingBytes = dataUrl.length * 2;
-      if (approxCurrentBytes + incomingBytes > 4_200_000) {
-        setPhotoError(
-          'Armazenamento local quase cheio. Exclua fotos antigas ou faça um backup antes de adicionar novas fotos.'
-        );
-        return;
-      }
-
-      const latestWeight =
-        measurements[measurements.length - 1]?.weightKg || 0;
-      addProgressPhoto({
-        date: new Date().toISOString().slice(0, 10),
-        weightKg: latestWeight,
-        caption: 'Registro de Progresso',
-        pose: 'Frente',
-        dataUrl,
+      restoreBackup(pendingRestore.data, mode);
+      const msg =
+        mode === 'replace'
+          ? 'Backup restaurado com sucesso!'
+          : 'Backup mesclado com sucesso!';
+      setBackupFeedback({
+        type: 'success',
+        text: msg,
+        canUndo: true,
       });
-    } catch {
-      setPhotoError(
-        'Não foi possível processar esta imagem. Tente outra foto.'
-      );
+      toast.success(msg);
+    } catch (err) {
+      const quota = (err as Error)?.name === 'QuotaExceededError';
+      const msg = quota
+        ? 'Sem espaço no armazenamento do navegador. Tente um backup sem fotos.'
+        : 'Não foi possível restaurar o backup. Nenhum dado foi alterado.';
+      setBackupFeedback({
+        type: 'error',
+        text: msg,
+      });
+      toast.error(msg);
+    } finally {
+      setPendingRestore(null);
     }
   };
 
-  const MEASURE_LABELS: Record<
-    typeof measureMetric,
-    { label: string; unit: string }
-  > = {
-    weightKg: { label: 'Peso Corporal', unit: unitLabel },
-    bodyFatPct: { label: 'Gordura Corporal (BF)', unit: '%' },
-    rightBicepCm: { label: 'Bíceps', unit: 'cm' },
-    chestCm: { label: 'Peitoral', unit: 'cm' },
-    waistCm: { label: 'Cintura', unit: 'cm' },
-    rightThighCm: { label: 'Coxa / Quadríceps', unit: 'cm' },
+  const handleUndoRestore = () => {
+    if (undoLastRestore()) {
+      const msg = 'Restauração desfeita.';
+      setBackupFeedback({ type: 'success', text: msg });
+      toast.success(msg);
+    } else {
+      const msg = 'Não há restauração para desfazer.';
+      setBackupFeedback({ type: 'error', text: msg });
+      toast.error(msg);
+    }
   };
 
   return (
     <div className="space-y-6 pb-28">
-      {/* Header do Perfil com Edição Direta do Nome */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
-        <div className="flex items-center gap-4 flex-1">
-          <div className="w-16 h-16 rounded-full bg-[#0084FF] flex items-center justify-center text-white text-xl font-extrabold shadow-sm shrink-0">
-            {(settings.name || 'U')
-              .split(' ')
-              .map((n) => n[0])
-              .join('')
-              .slice(0, 2)
-              .toUpperCase()}
+      {/* Header do Perfil com Edição Direta do Nome & KPIs Globais */}
+      <Card className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-4 flex-1 min-w-0">
+          <div className="size-16 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xl font-extrabold shadow-sm shrink-0">
+            {initials}
           </div>
 
           {isEditingName ? (
@@ -505,1191 +133,163 @@ export function ProfileAnalyticsView() {
               className="flex-1 max-w-md space-y-2"
             >
               <div className="flex items-center gap-2">
-                <input
+                <Input
                   type="text"
                   autoFocus
                   value={nameInput}
                   onChange={(e) => setNameInput(e.target.value)}
                   placeholder="Seu nome..."
-                  className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-[#0084FF] text-base font-bold text-slate-900 focus:outline-none"
+                  aria-label="Nome do atleta"
+                  className="font-bold"
                 />
-                <button
+                <Button
                   type="submit"
-                  className="h-11 px-3.5 rounded-xl bg-[#0084FF] text-white text-xs font-bold flex items-center gap-1 shrink-0"
+                  size="default"
+                  className="min-h-[44px] px-3.5 text-xs shrink-0"
                 >
-                  <Check className="w-3.5 h-3.5" /> Salvar
-                </button>
-                <button
+                  <Check className="size-3.5" /> Salvar
+                </Button>
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="icon"
                   aria-label="Cancelar edição do nome"
                   onClick={() => setIsEditingName(false)}
-                  className="w-11 h-11 rounded-xl bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center shrink-0"
+                  className="min-h-[44px] shrink-0"
                 >
-                  <X className="w-4 h-4" />
-                </button>
+                  <X className="size-4" />
+                </Button>
               </div>
-              <input
+              <Input
                 type="text"
                 value={bioInput}
                 onChange={(e) => setBioInput(e.target.value)}
                 placeholder="Sua bio ou objetivo (opcional)..."
-                className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-700 focus:outline-none"
+                aria-label="Bio ou objetivo"
               />
             </form>
           ) : (
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-extrabold text-slate-900">
+            <div className="min-w-0 space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl font-extrabold text-foreground truncate">
                   {settings.name || 'Usuário'}
                 </h1>
-                <button
+                <Badge variant="info" className="text-[11px]">
+                  {settings.weeklyWorkoutGoal}x/sem
+                </Badge>
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={() => {
                     setNameInput(settings.name);
                     setBioInput(settings.bio);
                     setIsEditingName(true);
                   }}
                   title="Alterar Nome"
-                  className="min-h-[44px] px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-[#0084FF] flex items-center gap-1.5 transition"
+                  className="min-h-[44px] px-3 text-xs text-blue-600 dark:text-blue-400"
                 >
-                  <Edit3 className="w-3.5 h-3.5" /> Alterar Nome
-                </button>
+                  <Edit3 className="size-3.5" /> Alterar Nome
+                </Button>
               </div>
               {settings.bio && (
-                <p className="text-xs text-slate-500 mt-1">{settings.bio}</p>
+                <p className="text-xs text-muted-foreground">{settings.bio}</p>
               )}
             </div>
           )}
         </div>
 
         {/* KPIs Globais */}
-        <div className="grid grid-cols-3 gap-3 sm:gap-5 border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-100">
-          <div className="text-center">
-            <span className="text-lg font-extrabold text-slate-900">
+        <div className="grid grid-cols-3 gap-2.5 sm:gap-3 border-t sm:border-t-0 pt-3 sm:pt-0 border-border shrink-0">
+          <Card className="bg-secondary/50 px-3 py-2.5 text-center shadow-none">
+            <span className="text-lg font-extrabold text-foreground tabular-nums block leading-tight">
               {totalStats.totalWorkouts}
             </span>
-            <p className="text-[11px] text-slate-500">Treinos</p>
-          </div>
-          <div className="text-center">
-            <span className="text-lg font-extrabold text-[#0084FF]">
+            <p className="text-[11px] text-muted-foreground mt-0.5">Treinos</p>
+          </Card>
+
+          <Card className="bg-secondary/50 px-3 py-2.5 text-center shadow-none">
+            <span className="text-lg font-extrabold text-blue-600 dark:text-blue-400 tabular-nums block leading-tight">
               {weightUnit === 'lbs'
                 ? `${(convertVolumeFromKg(totalStats.totalVolume, 'lbs') / 1000).toFixed(1)}k lbs`
                 : `${(totalStats.totalVolume / 1000).toFixed(1)}t`}
             </span>
-            <p className="text-[11px] text-slate-500">Volume Total</p>
-          </div>
-          <div className="text-center">
-            <span className="text-lg font-extrabold text-amber-600">
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Volume Total
+            </p>
+          </Card>
+
+          <Card className="bg-secondary/50 px-3 py-2.5 text-center shadow-none">
+            <span className="text-lg font-extrabold text-amber-600 dark:text-amber-400 tabular-nums block leading-tight">
               {totalStats.totalPRs}
             </span>
-            <p className="text-[11px] text-slate-500">Recordes (PRs)</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Navegação de Sub-Abas */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-2xs">
-        <button
-          onClick={() => setSubTab('analytics')}
-          className={`min-h-[44px] py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
-            subTab === 'analytics'
-              ? 'bg-[#2563EB] text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <BarChart3 className="w-4 h-4" /> Analytics & Heatmap
-        </button>
-        <button
-          onClick={() => setSubTab('measurements')}
-          className={`min-h-[44px] py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
-            subTab === 'measurements'
-              ? 'bg-[#2563EB] text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <Ruler className="w-4 h-4" /> Medidas Corporais
-        </button>
-        <button
-          onClick={() => setSubTab('photos')}
-          className={`min-h-[44px] py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
-            subTab === 'photos'
-              ? 'bg-[#2563EB] text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <Camera className="w-4 h-4" /> Fotos de Progresso
-        </button>
-        <button
-          onClick={() => setSubTab('data')}
-          className={`min-h-[44px] py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
-            subTab === 'data'
-              ? 'bg-[#2563EB] text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <Settings className="w-4 h-4" /> Backup & Dados
-        </button>
-      </div>
-
-      {/* ================= ABA 1: ANALYTICS, HEATMAP & RADAR ================= */}
-      {subTab === 'analytics' && (
-        <div className="space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-xs text-slate-600">
-              <Flame className="w-4 h-4 text-amber-500" />
-              <span>
-                Meta Semanal:{' '}
-                <strong className="text-slate-900">
-                  {settings.weeklyWorkoutGoal} treinos/semana
-                </strong>
-              </span>
-            </div>
-            <div className="flex bg-white border border-slate-200 rounded-xl p-1 text-xs">
-              {[
-                { label: '7 Dias', val: 7 },
-                { label: '30 Dias', val: 30 },
-                { label: '90 Dias', val: 90 },
-                { label: 'Tudo', val: 'all' as const },
-              ].map((opt) => (
-                <button
-                  key={String(opt.val)}
-                  onClick={() => setPeriodDays(opt.val)}
-                  className={`min-h-[44px] px-3.5 py-2 rounded-lg font-semibold transition ${
-                    periodDays === opt.val
-                      ? 'bg-[#2563EB] text-white'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-xs">
-              <div>
-                <h3 className="text-base font-extrabold text-slate-900">
-                  Mapa Muscular (Heatmap Anatômico)
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Toque em qualquer músculo no corpo para inspecionar séries e volume
-                </p>
-              </div>
-              <BodyHeatmapSVG muscleScores={muscleDistribution} />
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col justify-between space-y-5 shadow-xs">
-              <div>
-                <h3 className="text-base font-extrabold text-slate-900">
-                  Equilíbrio Muscular (Radar & Séries)
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Proporção de séries efetivas entre grupamentos musculares
-                </p>
-              </div>
-
-              <div className="flex justify-center py-2">
-                <svg viewBox="0 0 260 220" className="w-64 h-52">
-                  {[0.33, 0.66, 1].map((scale, sIdx) => {
-                    const pts = radarAxes
-                      .map((_, i) => {
-                        const angle =
-                          (Math.PI * 2 * i) / radarAxes.length - Math.PI / 2;
-                        const x = 130 + Math.cos(angle) * 75 * scale;
-                        const y = 110 + Math.sin(angle) * 75 * scale;
-                        return `${x},${y}`;
-                      })
-                      .join(' ');
-                    return (
-                      <polygon
-                        key={sIdx}
-                        points={pts}
-                        fill="none"
-                        className="stroke-slate-200"
-                        strokeWidth="1"
-                      />
-                    );
-                  })}
-
-                  {radarAxes.map((axis, i) => {
-                    const angle =
-                      (Math.PI * 2 * i) / radarAxes.length - Math.PI / 2;
-                    const x2 = 130 + Math.cos(angle) * 75;
-                    const y2 = 110 + Math.sin(angle) * 75;
-                    const lx = 130 + Math.cos(angle) * 98;
-                    const ly = 110 + Math.sin(angle) * 92;
-                    return (
-                      <g key={axis.label}>
-                        <line
-                          x1="130"
-                          y1="110"
-                          x2={x2}
-                          y2={y2}
-                          className="stroke-slate-200"
-                          strokeWidth="1"
-                        />
-                        <text
-                          x={lx}
-                          y={ly + 3}
-                          textAnchor="middle"
-                          className="fill-slate-600"
-                          fontSize="10"
-                          fontWeight="bold"
-                        >
-                          {axis.label}
-                        </text>
-                      </g>
-                    );
-                  })}
-
-                  <polygon
-                    points={radarAxes
-                      .map((axis, i) => {
-                        const angle =
-                          (Math.PI * 2 * i) / radarAxes.length - Math.PI / 2;
-                        const r = Math.max(0.12, axis.norm) * 75;
-                        const x = 130 + Math.cos(angle) * r;
-                        const y = 110 + Math.sin(angle) * r;
-                        return `${x},${y}`;
-                      })
-                      .join(' ')}
-                    fill="rgba(0, 132, 255, 0.22)"
-                    stroke="#0084FF"
-                    strokeWidth="2.5"
-                  />
-                </svg>
-              </div>
-
-              <div className="space-y-2">
-                {(Object.keys(muscleDistribution) as MuscleGroup[])
-                  .filter((m) => muscleDistribution[m].score > 0)
-                  .sort(
-                    (a, b) =>
-                      muscleDistribution[b].score - muscleDistribution[a].score
-                  )
-                  .slice(0, 6)
-                  .map((m) => {
-                    const item = muscleDistribution[m];
-                    return (
-                      <div key={m} className="space-y-1 text-xs">
-                        <div className="flex justify-between">
-                          <span className="font-semibold text-slate-800">
-                            {MUSCLE_LABELS[m]}
-                          </span>
-                          <span className="text-slate-500">
-                            {item.primarySets} diretas + {item.secondarySets}{' '}
-                            sin. (
-                            <strong className="text-[#0084FF]">
-                              {convertVolumeFromKg(
-                                item.volumeKg,
-                                weightUnit
-                              ).toLocaleString('pt-BR')}{' '}
-                              {unitLabel}
-                            </strong>
-                            )
-                          </span>
-                        </div>
-                        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-[#0084FF] rounded-full"
-                            style={{
-                              width: `${Math.min(100, item.score * 6)}%`,
-                            }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-xs">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-[#0084FF]" />
-                  Evolução por Sessão de Treino
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Comparativo das últimas sessões registradas
-                </p>
-              </div>
-
-              <div className="flex bg-slate-100 p-1 rounded-xl text-xs">
-                <button
-                  onClick={() => setChartType('volume')}
-                  className={`min-h-[44px] px-3 py-1.5 rounded-lg font-semibold ${
-                    chartType === 'volume'
-                      ? 'bg-[#2563EB] text-white'
-                      : 'text-slate-600'
-                  }`}
-                >
-                  Volume ({unitLabel})
-                </button>
-                <button
-                  onClick={() => setChartType('duration')}
-                  className={`min-h-[44px] px-3 py-1.5 rounded-lg font-semibold ${
-                    chartType === 'duration'
-                      ? 'bg-[#2563EB] text-white'
-                      : 'text-slate-600'
-                  }`}
-                >
-                  Duração (min)
-                </button>
-                <button
-                  onClick={() => setChartType('sets')}
-                  className={`min-h-[44px] px-3 py-1.5 rounded-lg font-semibold ${
-                    chartType === 'sets'
-                      ? 'bg-[#2563EB] text-white'
-                      : 'text-slate-600'
-                  }`}
-                >
-                  Séries
-                </button>
-              </div>
-            </div>
-
-            {filteredWorkouts.length === 0 ? (
-              <div className="py-10 text-center text-xs text-slate-400">
-                Complete um treino para visualizar o gráfico de evolução.
-              </div>
-            ) : (
-              (() => {
-                const displayedSessions = [...filteredWorkouts]
-                  .slice(0, 8)
-                  .reverse();
-                const getSessionVal = (w: (typeof displayedSessions)[0]) =>
-                  chartType === 'volume'
-                    ? convertVolumeFromKg(w.totalVolumeKg, weightUnit)
-                    : chartType === 'duration'
-                    ? Math.round(w.durationSeconds / 60)
-                    : w.totalSets;
-                const maxInSeries = Math.max(
-                  ...displayedSessions.map(getSessionVal),
-                  1
-                );
-                const dynamicMax = maxInSeries * 1.1;
-
-                return (
-                  <div className="grid grid-cols-8 gap-2 items-end h-44 pt-6 px-2 bg-slate-50 border border-slate-200 rounded-xl">
-                    {displayedSessions.map((w) => {
-                      const val = getSessionVal(w);
-                      const pct =
-                        val <= 0
-                          ? 8
-                          : Math.max(
-                              15,
-                              Math.min(100, Math.round((val / dynamicMax) * 100))
-                            );
-                      return (
-                        <div
-                          key={w.id}
-                          className="flex flex-col items-center justify-end h-full gap-1.5"
-                        >
-                          <span className="text-xs font-bold text-slate-700 tabular-nums">
-                            {chartType === 'volume'
-                              ? val >= 1000
-                                ? `${(val / 1000).toFixed(1)}k`
-                                : `${val}`
-                              : val}
-                          </span>
-                          <div
-                            style={{ height: `${pct}%` }}
-                            className="w-full max-w-[34px] rounded-t-lg bg-[#3B82F6] hover:bg-blue-600 transition-all"
-                            title={`${w.title}: ${val}`}
-                          />
-                          <span className="text-xs text-slate-500 pb-1 tabular-nums">
-                            {new Date(w.startTime).toLocaleDateString('pt-BR', {
-                              day: '2-digit',
-                              month: '2-digit',
-                            })}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ================= ABA 2: MEDIDAS CORPORAIS & PESO ================= */}
-      {subTab === 'measurements' && (
-        <div className="space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-extrabold text-slate-900">
-                Rastreador de Medidas Corporais & Peso
-              </h2>
-              <p className="text-xs text-slate-500">
-                Acompanhe a evolução de peso, percentual de gordura e circunferências
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                resetMeasurementForm();
-                setShowAddMeasurement(true);
-              }}
-              className="h-11 px-4 rounded-full bg-[#0084FF] hover:bg-blue-600 text-white text-xs font-bold flex items-center gap-1.5"
-            >
-              <Plus className="w-4 h-4" /> Registrar Medida
-            </button>
-          </div>
-
-          {measurements.length === 0 ? (
-            <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-10 text-center space-y-3">
-              <Scale className="w-10 h-10 text-slate-400 mx-auto" />
-              <h3 className="text-sm font-bold text-slate-900">
-                Nenhuma medida corporal registrada
-              </h3>
-              <p className="text-xs text-slate-500">
-                Clique em &ldquo;Registrar Medida&rdquo; para acompanhar seu peso e medidas.
-              </p>
-            </div>
-          ) : (
-            <>
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-xs">
-                <div className="flex flex-wrap gap-2">
-                  {(
-                    Object.keys(
-                      MEASURE_LABELS
-                    ) as (keyof typeof MEASURE_LABELS)[]
-                  ).map((key) => (
-                    <button
-                      key={key}
-                      onClick={() => setMeasureMetric(key)}
-                      className={`min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-bold border transition ${
-                        measureMetric === key
-                          ? 'bg-blue-50 border-[#0084FF] text-[#0084FF]'
-                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      {MEASURE_LABELS[key].label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2">
-                  {measurements.map((m) => {
-                    const rawVal = m[measureMetric];
-                    const displayVal =
-                      rawVal !== undefined
-                        ? measureMetric === 'weightKg'
-                          ? formatWeightValue(rawVal, weightUnit)
-                          : String(rawVal).replace('.', ',')
-                        : '—';
-                    return (
-                      <div
-                        key={m.id}
-                        className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col justify-between"
-                      >
-                        <div className="flex items-center justify-between text-xs text-slate-500">
-                          <span>
-                            {new Date(m.date + 'T12:00:00').toLocaleDateString(
-                              'pt-BR'
-                            )}
-                          </span>
-                          <button
-                            type="button"
-                            aria-label="Excluir medida corporal"
-                            onClick={() => {
-                              if (
-                                confirm(
-                                  'Deseja excluir este registro de medida corporal?'
-                                )
-                              ) {
-                                deleteBodyMeasurement(m.id);
-                              }
-                            }}
-                            className="w-11 h-11 -mr-1.5 -mt-1.5 rounded-xl flex items-center justify-center text-slate-400 hover:text-red-500 transition"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                        <p className="text-xl font-extrabold text-slate-900 mt-1">
-                          {displayVal}{' '}
-                          <span className="text-xs font-normal text-[#0084FF]">
-                            {MEASURE_LABELS[measureMetric].unit}
-                          </span>
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="bg-white border border-slate-200 rounded-2xl overflow-x-auto shadow-xs">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 text-slate-500 uppercase text-[10px]">
-                    <tr>
-                      <th className="py-3 px-4">Data</th>
-                      <th className="py-3 px-4">Peso</th>
-                      <th className="py-3 px-4">BF %</th>
-                      <th className="py-3 px-4">Kcal</th>
-                      <th className="py-3 px-4">Peito</th>
-                      <th className="py-3 px-4">Bíceps</th>
-                      <th className="py-3 px-4">Cintura</th>
-                      <th className="py-3 px-4">Coxa</th>
-                      <th className="py-3 px-4">Panturrilha</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-700">
-                    {[...measurements].reverse().map((m) => (
-                      <tr key={m.id} className="hover:bg-slate-50">
-                        <td className="py-3 px-4 font-semibold">
-                          {new Date(m.date + 'T12:00:00').toLocaleDateString(
-                            'pt-BR'
-                          )}
-                        </td>
-                        <td className="py-3 px-4 font-bold text-slate-900">
-                          {m.weightKg
-                            ? `${formatWeightValue(m.weightKg, weightUnit)} ${unitLabel}`
-                            : '—'}
-                        </td>
-                        <td className="py-3 px-4 text-emerald-600 font-semibold">
-                          {m.bodyFatPct ? `${m.bodyFatPct}%` : '—'}
-                        </td>
-                        <td className="py-3 px-4">
-                          {m.caloricIntakeKcal
-                            ? `${m.caloricIntakeKcal} kcal`
-                            : '—'}
-                        </td>
-                        <td className="py-3 px-4">
-                          {m.chestCm ? `${m.chestCm} cm` : '—'}
-                        </td>
-                        <td className="py-3 px-4 font-semibold text-[#0084FF]">
-                          {m.rightBicepCm ? `${m.rightBicepCm} cm` : '—'}
-                        </td>
-                        <td className="py-3 px-4">
-                          {m.waistCm ? `${m.waistCm} cm` : '—'}
-                        </td>
-                        <td className="py-3 px-4">
-                          {m.rightThighCm ? `${m.rightThighCm} cm` : '—'}
-                        </td>
-                        <td className="py-3 px-4">
-                          {m.calfCm ? `${m.calfCm} cm` : '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* ================= ABA 3: FOTOS DE PROGRESSO ================= */}
-      {subTab === 'photos' && (
-        <div className="space-y-6">
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
-            <div>
-              <h2 className="text-lg font-extrabold text-slate-900">
-                Galeria de Fotos de Progresso
-              </h2>
-              <p className="text-xs text-slate-500">
-                Adicione fotos associadas à data e ao seu peso corporal
-              </p>
-            </div>
-
-            <label className="px-4 py-2.5 rounded-full bg-[#0084FF] hover:bg-blue-600 text-white text-xs font-bold flex items-center gap-2 cursor-pointer shrink-0">
-              <Camera className="w-4 h-4" /> Adicionar Foto
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handlePhotoUpload}
-                className="hidden"
-              />
-            </label>
-          </div>
-
-          {photoError && (
-            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 shrink-0" />
-              <span>{photoError}</span>
-            </div>
-          )}
-
-          {progressPhotos.length === 0 ? (
-            <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-12 text-center space-y-3">
-              <Camera className="w-10 h-10 text-slate-400 mx-auto" />
-              <h3 className="text-sm font-bold text-slate-900">
-                Nenhuma foto de progresso salva ainda
-              </h3>
-              <p className="text-xs text-slate-500 max-w-md mx-auto">
-                Clique em &ldquo;Adicionar Foto&rdquo; acima para registrar sua evolução física.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {progressPhotos.map((photo) => (
-                <div
-                  key={photo.id}
-                  className="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col justify-between shadow-xs"
-                >
-                  <img
-                    src={photo.dataUrl}
-                    alt={photo.caption}
-                    className="w-full h-64 object-cover"
-                  />
-                  <div className="p-4 flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-bold text-slate-900">
-                        {photo.date}{' '}
-                        {photo.weightKg ? `• ${photo.weightKg} kg` : ''}
-                      </p>
-                      <p className="text-[11px] text-slate-500">
-                        {photo.caption}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      aria-label="Excluir foto de progresso"
-                      onClick={() => {
-                        if (confirm('Deseja excluir esta foto de progresso?')) {
-                          deleteProgressPhoto(photo.id);
-                        }
-                      }}
-                      className="w-11 h-11 rounded-xl flex items-center justify-center text-slate-400 hover:text-red-500 transition"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ================= ABA 4: EXPORTAÇÃO CSV & CONFIGURAÇÕES ================= */}
-      {subTab === 'data' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="md:col-span-2 bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-xs">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-[#0084FF]" />
-                  Backup & Restauração
-                </h3>
-                <p className="text-xs text-slate-500 leading-relaxed mt-1">
-                  Seus dados ficam salvos apenas neste aparelho. Exporte um backup em{' '}
-                  <code>.json</code> (rotinas, histórico, nutrição, medidas, fotos e
-                  configurações) e restaure quando trocar de celular ou limpar o navegador.
-                </p>
-              </div>
-            </div>
-
-            <div
-              className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
-                backupOverdue
-                  ? 'bg-amber-50 border-amber-200 text-amber-800'
-                  : 'bg-slate-50 border-slate-200 text-slate-600'
-              }`}
-            >
-              {backupOverdue ? (
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-              ) : (
-                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
-              )}
-              <span>
-                {lastBackupLabel}
-                {backupOverdue && ' — recomendamos fazer um backup agora.'}
-              </span>
-            </div>
-
-            <label className="flex items-center gap-3 text-sm text-slate-700 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                className="w-5 h-5 accent-[#0084FF]"
-                checked={includePhotosInBackup}
-                onChange={(e) => setIncludePhotosInBackup(e.target.checked)}
-              />
-              Incluir fotos de progresso
-              <span className="text-xs text-slate-400">({progressPhotos.length})</span>
-            </label>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <button
-                onClick={handleExportBackup}
-                disabled={isExporting}
-                className="h-12 rounded-xl bg-[#0084FF] hover:bg-blue-600 disabled:opacity-60 text-white text-sm font-bold flex items-center justify-center gap-2"
-              >
-                <Download className="w-5 h-5" /> Exportar Backup
-              </button>
-              <button
-                onClick={() => restoreInputRef.current?.click()}
-                className="h-12 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-sm font-bold flex items-center justify-center gap-2"
-              >
-                <Upload className="w-5 h-5" /> Restaurar Backup
-              </button>
-              <input
-                ref={restoreInputRef}
-                type="file"
-                accept="application/json,.json"
-                className="hidden"
-                onChange={handleRestoreFile}
-              />
-            </div>
-
-            {backupMessage && (
-              <div
-                className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
-                  backupMessage.type === 'success'
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                    : 'bg-red-50 border-red-200 text-red-700'
-                }`}
-              >
-                {backupMessage.type === 'success' ? (
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                ) : (
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
-                )}
-                <span className="flex-1">{backupMessage.text}</span>
-                {backupMessage.canUndo && (
-                  <button
-                    onClick={handleUndoRestore}
-                    className="h-9 px-3 rounded-lg bg-white border border-emerald-300 text-emerald-700 font-bold flex items-center gap-1"
-                  >
-                    <Undo2 className="w-4 h-4" /> Desfazer
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-
-          {pendingRestore && (
-            <RestoreBackupModal
-              file={pendingRestore}
-              onCancel={() => setPendingRestore(null)}
-              onConfirm={handleConfirmRestore}
-            />
-          )}
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-xs">
-            <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-              <Download className="w-4 h-4 text-[#0084FF]" />
-              Exportar & Gerenciar Dados
-            </h3>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Exporte todo o seu histórico de treinos em formato <code>.csv</code>{' '}
-              ou limpe todos os dados armazenados no navegador.
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Recordes (PRs)
             </p>
-
-            <div className="flex flex-wrap gap-3">
-              <button
-                onClick={handleDownloadCSV}
-                className="px-4 py-2.5 rounded-xl bg-[#0084FF] hover:bg-blue-600 text-white text-xs font-bold flex items-center gap-2"
-              >
-                <Download className="w-4 h-4" /> Exportar Histórico CSV
-              </button>
-
-              <button
-                onClick={() => {
-                  if (
-                    confirm(
-                      'Deseja apagar todos os dados cadastrados e voltar ao estado inicial vazio?'
-                    )
-                  ) {
-                    clearAllData();
-                    setCsvFeedback('Todos os dados foram zerados.');
-                  }
-                }}
-                className="px-4 py-2.5 rounded-xl bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 text-xs font-bold"
-              >
-                Zerar Todos os Dados
-              </button>
-            </div>
-
-            {csvFeedback && (
-              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>{csvFeedback}</span>
-              </div>
-            )}
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-xs">
-            <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-              <Settings className="w-4 h-4 text-[#0084FF]" />
-              Preferências do Usuário & Treino
-            </h3>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="block text-slate-600 font-semibold mb-1">
-                  Nome no Perfil
-                </label>
-                <input
-                  type="text"
-                  value={settings.name}
-                  onChange={(e) => updateSettings({ name: e.target.value })}
-                  className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-                <div>
-                  <label className="block text-slate-600 font-semibold mb-1">
-                    Tema da Interface
-                  </label>
-                  <select
-                    value={settings.theme ?? 'dark'}
-                    onChange={(e) =>
-                      updateSettings({
-                        theme: e.target.value === 'light' ? 'light' : 'dark',
-                      })
-                    }
-                    className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-slate-900 font-semibold"
-                  >
-                    <option value="dark">Escuro (Padrão)</option>
-                    <option value="light">Claro (Alto Contraste)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-slate-600 font-semibold mb-1">
-                    Unidade de Peso
-                  </label>
-                  <select
-                    value={weightUnit}
-                    onChange={(e) =>
-                      updateSettings({
-                        weightUnit: e.target.value === 'lbs' ? 'lbs' : 'kg',
-                      })
-                    }
-                    className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-slate-900 font-semibold"
-                  >
-                    <option value="kg">Quilogramas (kg)</option>
-                    <option value="lbs">Libras (lbs)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                <div>
-                  <label className="block text-slate-600 font-semibold mb-1">
-                    Meta Semanal
-                  </label>
-                  <select
-                    value={settings.weeklyWorkoutGoal || 4}
-                    onChange={(e) =>
-                      updateSettings({
-                        weeklyWorkoutGoal: Number(e.target.value),
-                      })
-                    }
-                    className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-slate-900 font-semibold"
-                  >
-                    <option value={2}>2 treinos / sem</option>
-                    <option value={3}>3 treinos / sem</option>
-                    <option value={4}>4 treinos / sem</option>
-                    <option value={5}>5 treinos / sem</option>
-                    <option value={6}>6 treinos / sem</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-slate-600 font-semibold mb-1">
-                    Descanso Padrão
-                  </label>
-                  <select
-                    value={settings.defaultRestSeconds}
-                    onChange={(e) =>
-                      updateSettings({
-                        defaultRestSeconds: Number(e.target.value),
-                      })
-                    }
-                    className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-slate-900"
-                  >
-                    <option value={60}>60 segundos</option>
-                    <option value={90}>90 segundos</option>
-                    <option value={120}>120 segundos</option>
-                    <option value={150}>150 segundos</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-slate-600 font-semibold mb-1">
-                    Peso da Barra
-                  </label>
-                  <select
-                    value={settings.defaultBarWeightKg}
-                    onChange={(e) =>
-                      updateSettings({
-                        defaultBarWeightKg: Number(e.target.value),
-                        barbellWeightKg: Number(e.target.value),
-                      })
-                    }
-                    className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-slate-900"
-                  >
-                    <option value={20}>20 kg (Olímpica)</option>
-                    <option value={15}>15 kg</option>
-                    <option value={10}>10 kg</option>
-                  </select>
-                </div>
-              </div>
-
-              <label className="flex items-center justify-between pt-2 min-h-[44px] cursor-pointer">
-                <span className="text-slate-700 font-medium">
-                  Exibir coluna RPE na tabela de treino (Avançado)
-                </span>
-                <input
-                  type="checkbox"
-                  checked={Boolean(settings.showRpeColumn)}
-                  onChange={(e) =>
-                    updateSettings({ showRpeColumn: e.target.checked })
-                  }
-                  className="w-5 h-5 accent-[#2563EB]"
-                />
-              </label>
-
-              <label className="flex items-center justify-between min-h-[44px] cursor-pointer">
-                <span className="text-slate-700 font-medium">
-                  Alerta Sonoro ao Fim do Descanso
-                </span>
-                <input
-                  type="checkbox"
-                  checked={settings.soundEnabled}
-                  onChange={(e) =>
-                    updateSettings({ soundEnabled: e.target.checked })
-                  }
-                  className="w-5 h-5 accent-[#2563EB]"
-                />
-              </label>
-
-              <div className="pt-3 border-t border-slate-100 space-y-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <span className="text-slate-900 font-bold flex items-center gap-1.5">
-                      <Bell className="w-3.5 h-3.5 text-[#0084FF]" />
-                      Notificações Push no iPhone / Segundo Plano
-                    </span>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      Receba alerta na tela bloqueada quando o tempo de descanso acabar.
-                    </p>
-                  </div>
-                  <span
-                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase shrink-0 ${
-                      notifStatus === 'granted'
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : 'bg-slate-100 text-slate-600'
-                    }`}
-                  >
-                    {notifStatus === 'granted' ? 'Ativo' : 'Inativo'}
-                  </span>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  {notifStatus !== 'granted' ? (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        const res = await enableRestTimerNotifications();
-                        setNotifStatus(getNotificationPermissionState());
-                        if (res.granted) {
-                          setNotifMessage(
-                            'Notificações de descanso ativadas com sucesso!'
-                          );
-                        } else if (res.reason) {
-                          setNotifMessage(res.reason);
-                        }
-                      }}
-                      className="px-3.5 py-2 rounded-xl bg-[#0084FF] hover:bg-blue-600 text-white font-bold text-xs flex items-center gap-1.5"
-                    >
-                      <Bell className="w-3.5 h-3.5" /> Ativar Notificações de Descanso
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        await triggerImmediateRestNotification('Supino Reto');
-                        setNotifMessage('Notificação de teste enviada!');
-                      }}
-                      className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center gap-1.5"
-                    >
-                      <Bell className="w-3.5 h-3.5 text-[#0084FF]" /> Testar Notificação Agora
-                    </button>
-                  )}
-                </div>
-
-                {notifMessage && (
-                  <p className="text-[11px] text-[#0084FF] font-medium">
-                    {notifMessage}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
+          </Card>
         </div>
-      )}
+      </Card>
 
-      {/* Modal Adicionar Medida Corporal */}
-      {showAddMeasurement && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
-          <form
-            onSubmit={handleSaveMeasurement}
-            className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-5 space-y-4 shadow-2xl"
+      {/* Navegação de Sub-Abas com shadcn Tabs */}
+      <Tabs
+        value={subTab}
+        onValueChange={(value) => setSubTab(value as ProfileSubTab)}
+        className="space-y-2"
+      >
+        <TabsList className="grid grid-cols-2 sm:grid-cols-4 h-auto gap-2 rounded-2xl border border-border bg-card p-1.5 shadow-2xs">
+          <TabsTrigger
+            value="analytics"
+            className="min-h-[44px] py-2.5 px-3 rounded-xl text-xs font-bold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-xs"
           >
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                <Scale className="w-4 h-4 text-[#0084FF]" />
-                Registrar Medidas Corporais
-              </h3>
-              <button
-                type="button"
-                aria-label="Fechar modal de medidas"
-                onClick={() => setShowAddMeasurement(false)}
-                className="w-11 h-11 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+            <BarChart3 className="size-4 shrink-0" /> Analytics &amp; Heatmap
+          </TabsTrigger>
+          <TabsTrigger
+            value="measurements"
+            className="min-h-[44px] py-2.5 px-3 rounded-xl text-xs font-bold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-xs"
+          >
+            <Ruler className="size-4 shrink-0" /> Medidas Corporais
+          </TabsTrigger>
+          <TabsTrigger
+            value="photos"
+            className="min-h-[44px] py-2.5 px-3 rounded-xl text-xs font-bold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-xs"
+          >
+            <Camera className="size-4 shrink-0" /> Fotos de Progresso
+          </TabsTrigger>
+          <TabsTrigger
+            value="data"
+            className="min-h-[44px] py-2.5 px-3 rounded-xl text-xs font-bold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-xs"
+          >
+            <Settings className="size-4 shrink-0" /> Backup &amp; Dados
+          </TabsTrigger>
+        </TabsList>
 
-            {measurementError && (
-              <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-                <span>{measurementError}</span>
-              </div>
-            )}
+        <TabsContent value="analytics">
+          <AnalyticsTab />
+        </TabsContent>
 
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="col-span-2">
-                <label className="block text-slate-600 font-semibold mb-1">
-                  Data
-                </label>
-                <input
-                  type="date"
-                  required
-                  value={mDate}
-                  onChange={(e) => setMDate(e.target.value)}
-                  className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"
-                />
-              </div>
-              <div>
-                <label className="block text-slate-600 font-semibold mb-1">
-                  Peso Corporal ({unitLabel})
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={mWeight}
-                  onChange={(e) => setMWeight(e.target.value)}
-                  className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"
-                />
-              </div>
-              <div>
-                <label className="block text-slate-600 font-semibold mb-1">
-                  Gordura BF (%)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  value={mBodyFat}
-                  onChange={(e) => setMBodyFat(e.target.value)}
-                  className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"
-                />
-              </div>
-              <div>
-                <label className="block text-slate-600 font-semibold mb-1">
-                  Peito (cm)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={mChest}
-                  onChange={(e) => setMChest(e.target.value)}
-                  className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"
-                />
-              </div>
-              <div>
-                <label className="block text-slate-600 font-semibold mb-1">
-                  Bíceps (cm)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={mBicep}
-                  onChange={(e) => setMBicep(e.target.value)}
-                  className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"
-                />
-              </div>
-              <div>
-                <label className="block text-slate-600 font-semibold mb-1">
-                  Cintura (cm)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={mWaist}
-                  onChange={(e) => setMWaist(e.target.value)}
-                  className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"
-                />
-              </div>
-              <div>
-                <label className="block text-slate-600 font-semibold mb-1">
-                  Coxa (cm)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={mThigh}
-                  onChange={(e) => setMThigh(e.target.value)}
-                  className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"
-                />
-              </div>
-              <div>
-                <label className="block text-slate-600 font-semibold mb-1">
-                  Panturrilha (cm)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={mCalf}
-                  onChange={(e) => setMCalf(e.target.value)}
-                  className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"
-                />
-              </div>
-              <div>
-                <label className="block text-slate-600 font-semibold mb-1">
-                  Calorias (kcal)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={mKcal}
-                  onChange={(e) => setMKcal(e.target.value)}
-                  className="w-full h-11 px-3 rounded-xl bg-[#F1F5F9] border border-slate-200 text-base text-slate-900"
-                />
-              </div>
-            </div>
+        <TabsContent value="measurements">
+          <MeasurementsTab />
+        </TabsContent>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowAddMeasurement(false)}
-                className="h-11 px-4 rounded-xl bg-slate-100 text-xs font-semibold text-slate-700"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="h-11 px-5 rounded-xl bg-[#0084FF] text-xs font-bold text-white"
-              >
-                Salvar Medida
-              </button>
-            </div>
-          </form>
-        </div>
+        <TabsContent value="photos">
+          <ProgressPhotosTab />
+        </TabsContent>
+
+        <TabsContent value="data">
+          <DataAndSettingsTab
+            onRequestRestore={setPendingRestore}
+            backupFeedback={backupFeedback}
+            onBackupFeedback={setBackupFeedback}
+            onUndoRestore={handleUndoRestore}
+          />
+        </TabsContent>
+      </Tabs>
+
+      {pendingRestore && (
+        <RestoreBackupModal
+          file={pendingRestore}
+          onCancel={() => setPendingRestore(null)}
+          onConfirm={handleConfirmRestore}
+        />
       )}
     </div>
   );
