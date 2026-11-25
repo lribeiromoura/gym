@@ -18,9 +18,9 @@ function Toaster({ theme = 'dark', ...props }: ToasterProps) {
           title: 'font-bold text-foreground',
           description: 'text-xs text-muted-foreground',
           actionButton:
-            'min-h-9 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground',
+            'min-h-11 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground',
           cancelButton:
-            'min-h-9 rounded-lg bg-secondary px-3 text-xs font-bold text-secondary-foreground',
+            'min-h-11 rounded-lg bg-secondary px-3 text-xs font-bold text-secondary-foreground',
         },
       }}
       {...props}

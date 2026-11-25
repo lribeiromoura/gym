@@ -155,9 +155,9 @@ export function WorkoutExerciseCard({
             <button
               type="button"
               onClick={() => exerciseMeta && onInspectExercise(exerciseMeta)}
-              className="text-[17px] font-bold text-blue-600 dark:text-blue-400 hover:underline text-left truncate block cursor-pointer"
+              className="min-h-11 flex items-center text-[17px] font-bold text-blue-600 dark:text-blue-400 hover:underline text-left truncate max-w-full cursor-pointer"
             >
-              {exerciseMeta?.title || 'Exercício'}
+              <span className="truncate">{exerciseMeta?.title || 'Exercício'}</span>
             </button>
             {workoutExercise.supersetId && (
               <Badge

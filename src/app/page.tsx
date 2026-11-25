@@ -42,13 +42,7 @@ export default function IronPulseAppPage() {
 
   useEffect(() => {
     const root = document.documentElement;
-    if (isDark) {
-      root.classList.add('dark', 'theme-dark');
-      root.classList.remove('theme-light');
-    } else {
-      root.classList.add('theme-light');
-      root.classList.remove('dark', 'theme-dark');
-    }
+    root.classList.toggle('dark', isDark);
   }, [isDark]);
 
   const toggleTheme = () => {
@@ -104,7 +98,7 @@ export default function IronPulseAppPage() {
   return (
     <div
       className={`min-h-screen flex flex-col md:flex-row bg-background text-foreground transition-colors ${
-        isDark ? 'theme-dark dark' : 'theme-light'
+        isDark ? 'dark' : ''
       }`}
     >
       {/* Sidebar Desktop */}
